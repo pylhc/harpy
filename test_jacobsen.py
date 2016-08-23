@@ -4,11 +4,12 @@ import os
 import numpy as np
 import jacobsen
 import time
-from matplotlib import pyplot
+#from matplotlib import pyplot
 from multiprocessing import Pool
 
 if "win" not in sys.platform:
-    sys.path.append("/afs/cern.ch/work/j/jcoellod/public/Beta-Beat.src")
+    #sys.path.append("/afs/cern.ch/work/j/jcoellod/public/Beta-Beat.src")
+    sys.path.append("/afs/cern.ch/work/l/lmalina/Beta-Beat.src")
 else:
     sys.path.append("\\\\AFS\\cern.ch\\work\\j\\jcoellod\\public\\Beta-Beat.src")
 
@@ -16,83 +17,76 @@ from Python_Classes4MAD import metaclass
 from Python_Classes4MAD.SDDSIlya import SDDSReader
 from drive import drive_runner
 from Utilities import tfs_file_writer
-
+PI2I = 2 * np.pi * complex(0, 1)
 
 RESONANCE_LIST_X = [(1, 0), (0, 1), (-2, 0), (0, 2), (-3, 0), (-1, -1), (2, -2), (0, -2), (1, -2), (-1, 3), (1, 2), (-2, 1), (1, 1), (2, 0), (-1, -2), (3, 0)]
 RESONANCE_LIST_Y = [(0, 1), (1, 0), (-1, 1), (-2, 0), (1, -1), (0, -2), (0, -3), (-1, 1), (2, 1), (-1, 3), (1, 1), (-1, 2)]
 
 
 def main():
-    # input_sdds_file_path = "Beam1@Turn@2015_04_10@23_46_40_802_0.sdds.new.new"
-    input_sdds_file_path = "../test_avg_tune/ALLBPMs"
     output_dir = "./"
+    tune_x = 44
+    tune_y = 39
+    t_x = 0.44
+    t_y = 0.39
+    for i in range (1,2):
+        input_sdds_file_path = "Kick_1503_1.46x0.34_" + str(i) #/afs/cern.ch/work/l/lmalina/ESRF/ATNoScans/
+        turnNo=200 + 10*i
+        print input_sdds_file_path,turnNo
+        start = time.time()
+        drive_runner.run_drive(input_sdds_file_path, 0, turnNo, tune_x, tune_y, nat_tune_x=tune_x, nat_tune_y=tune_y, clean_up=False, stdout=open("drive_output.txt", "w"))
+        print "Drive took:", time.time() - start
 
-    start = time.time()
-    drive_runner.run_drive(input_sdds_file_path, 0, 6000, 0.27, 0.32, nat_tune_x=0.28, nat_tune_y=0.31,
-                           clean_up=True, stdout=open("drive_output.txt", "w"))
-
-    drive_out = metaclass.twiss(input_sdds_file_path + "_linx")
-    print "Drive: "
-    print "number of bpms", len(drive_out.TUNEX)
-    print "avg:", np.mean(drive_out.TUNEX)
-    print "std:", np.std(drive_out.TUNEX)
-    print "Drive took:", time.time() - start
-
-    ex_bpm = "BPMYB.5L2.B1"
-    spectra_file = metaclass.twiss("../test_avg_tune/BPM/" + ex_bpm + ".x")
-    freq, amp = zip(*sorted(zip(spectra_file.FREQ, spectra_file.AMP)))
-    pyplot.bar(freq, amp, width=0.001)
-    pyplot.xlabel("Amplitudes")
-    pyplot.ylabel("Frequencies")
-    pyplot.ylim([1e-4,2])
-    pyplot.yscale("log")
-    pyplot.show()
-
-    start = time.time()
-    tune_x = 0.28
-    tune_y = 0.31
-    analyze_tbt_data(input_sdds_file_path, output_dir, tune_x, tune_y)
-    print "You took:", time.time() - start
+        start = time.time()
+        analyze_tbt_data(input_sdds_file_path, output_dir, t_x, t_y, turnNo)
+        print "You took:", time.time() - start
+        
 
 
-def analyze_tbt_data(input_sdds_file_path, output_dir, tune_x, tune_y):
+def analyze_tbt_data(input_sdds_file_path, output_dir, tune_x, tune_y, turnNo):
     raw_sdds_data = SDDSReader(input_sdds_file_path)
     pool = Pool()
 
-    linx_outfile = _create_lin_file("linx.dat", "x")
-    liny_outfile = _create_lin_file("liny.dat", "y")
+    linx_outfile = _create_lin_file(input_sdds_file_path+"b_linx", "x")
+    liny_outfile = _create_lin_file(input_sdds_file_path+"b_liny", "y")
     bpm_results_x = []
     bpm_results_y = []
     tune_tolerance = 0.01
 
     for bpm_data in raw_sdds_data.records:
         if bpm_data[0] == "0":
-            # pool.apply_async(process_single_bpm, (bpm_data, tune_x, tune_y, tune_tolerance),
-            #                  callback=lambda results: _write_single_bpm_results(linx_outfile, results, bpm_results_x))
-            _write_single_bpm_results(linx_outfile, apply(process_single_bpm, (bpm_data, tune_x, tune_y, tune_tolerance)), bpm_results_x)
+            pool.apply_async(process_single_bpm, (bpm_data, tune_x, tune_y, tune_tolerance, turnNo), callback=lambda results: _append_single_bpm_results(results, bpm_results_x))
+            #_write_single_bpm_results(linx_outfile, apply(process_single_bpm, (bpm_data, tune_x, tune_y, tune_tolerance,turnNo)), bpm_results_x)
         elif bpm_data[0] == "1":
-            # pool.apply_async(process_single_bpm, (bpm_data, tune_x, tune_y, tune_tolerance),
-            #                  callback=lambda results: _write_single_bpm_results(liny_outfile, results, bpm_results_y))
-            _write_single_bpm_results(liny_outfile, apply(process_single_bpm, (bpm_data, tune_x, tune_y, tune_tolerance)), bpm_results_y)
+            pool.apply_async(process_single_bpm, (bpm_data, tune_x, tune_y, tune_tolerance, turnNo), callback=lambda results: _append_single_bpm_results(results, bpm_results_y))
+            #_write_single_bpm_results(liny_outfile, apply(process_single_bpm, (bpm_data, tune_x, tune_y, tune_tolerance,turnNo)), bpm_results_y)
     pool.close()
     pool.join()
-
+    
     tune_x, rms_tune_x = _compute_tune_stats(bpm_results_x)
     tune_y, rms_tune_y = _compute_tune_stats(bpm_results_y)
-
+    for bpm in bpm_results_x:
+        exponents = np.exp(-PI2I * tune_x * np.arange(len(bpm.samples)))
+        bpm.avphase=np.angle(np.sum(exponents*bpm.samples))/ (2 * np.pi)
+        _write_single_bpm_results(linx_outfile, bpm)
+    for bpm in bpm_results_y:
+        exponents = np.exp(-PI2I * tune_y * np.arange(len(bpm.samples)))
+        bpm.avphase=np.angle(np.sum(exponents*bpm.samples))/ (2 * np.pi)
+        _write_single_bpm_results(liny_outfile, bpm)
     linx_outfile.add_float_descriptor("Q1", tune_x)
     linx_outfile.add_float_descriptor("Q1RMS", rms_tune_x)
     liny_outfile.add_float_descriptor("Q2", tune_y)
     liny_outfile.add_float_descriptor("Q2RMS", rms_tune_y)
+
     linx_outfile.write_to_file()
     liny_outfile.write_to_file()
 
 
-def process_single_bpm(bpm_data, tune_x, tune_y, tune_tolerance):
+def process_single_bpm(bpm_data, tune_x, tune_y, tune_tolerance, turnNo):
     bpm_plane = bpm_data[0]
     bpm_name = bpm_data[1]
     bpm_position = bpm_data[2]
-    bpm_samples = np.array(map(float, bpm_data[3:]))
+    bpm_samples = np.array(map(float, bpm_data[3:turnNo+3]))
 
     if bpm_plane == "0":
         main_resonance = (1, 0)
@@ -104,10 +98,7 @@ def process_single_bpm(bpm_data, tune_x, tune_y, tune_tolerance):
     frequencies, coefficients = jacobsen.laskar_method(bpm_samples, 300)
     resonances = jacobsen.resonance_search(frequencies, coefficients,
                                            tune_x, tune_y, tune_tolerance, resonance_list)
-    if bpm_name == "BPMYB.5L2.B1":
-        jacobsen._plot_decomposition(frequencies, coefficients)
-        sys.exit()
-
+    
     tune, main_coefficient = resonances[main_resonance]
     amplitude = np.abs(main_coefficient)
     phase = np.angle(main_coefficient)
@@ -120,11 +111,12 @@ def process_single_bpm(bpm_data, tune_x, tune_y, tune_tolerance):
     bpm_results.coefficients = coefficients
     bpm_results.resonances = resonances
     bpm_results.compute_orbit(bpm_samples)
+    bpm_results.samples = (bpm_samples - np.average(bpm_samples))
     return bpm_results
 
 
-def _write_single_bpm_results(lin_outfile, bpm_results, bpm_results_list):
-    row = [bpm_results.name, bpm_results.position, 0, 0, bpm_results.tune, 0, bpm_results.peak_to_peak, bpm_results.closed_orbit, bpm_results.closed_orbit_rms, bpm_results.amplitude, bpm_results.phase, bpm_results.phase]
+def _write_single_bpm_results(lin_outfile, bpm_results):
+    row = [bpm_results.name, bpm_results.position, 0, 0, bpm_results.tune, 0, bpm_results.peak_to_peak, bpm_results.closed_orbit, bpm_results.closed_orbit_rms, bpm_results.amplitude, bpm_results.phase, bpm_results.avphase]
     if bpm_results.plane == "0":
         resonance_list = RESONANCE_LIST_X
         main_resonance = (1, 0)
@@ -145,6 +137,9 @@ def _write_single_bpm_results(lin_outfile, bpm_results, bpm_results_list):
     row.append(0.0)
     row.append(0.0)
     lin_outfile.add_table_row(row)
+    
+
+def _append_single_bpm_results(bpm_results, bpm_results_list):
     bpm_results_list.append(bpm_results)
 
 
@@ -176,9 +171,11 @@ class BpmResults(object):
         self.plane = plane
         self.tune = None
         self.phase = None
+        self.avphase = None
         self.amplitude = None
         self.frequencies = None
         self.coefficients = None
+        self.samples = None
 
     def compute_orbit(self, samples):
         self.closed_orbit = np.mean(samples)

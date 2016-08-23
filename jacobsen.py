@@ -4,7 +4,7 @@ DFT peak interpolation using the Jacobsen method with bias correction.
 
 import sys
 import numpy as np
-from matplotlib import pyplot
+#from matplotlib import pyplot
 
 PI2I = 2 * np.pi * complex(0, 1)
 
