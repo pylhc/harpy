@@ -4,6 +4,7 @@ import os
 import numpy as np
 import jacobsen
 import time
+from optparse import OptionParser
 #from matplotlib import pyplot
 from multiprocessing import Pool
 
@@ -15,51 +16,43 @@ else:
 
 from Python_Classes4MAD import metaclass
 from Python_Classes4MAD.SDDSIlya import SDDSReader
-from drive import drive_runner
 from Utilities import tfs_file_writer
 PI2I = 2 * np.pi * complex(0, 1)
 
-RESONANCE_LIST_X = [(1, 0), (0, 1), (-2, 0), (0, 2), (-3, 0), (-1, -1), (2, -2), (0, -2), (1, -2), (-1, 3), (1, 2), (-2, 1), (1, 1), (2, 0), (-1, -2), (3, 0)]
-RESONANCE_LIST_Y = [(0, 1), (1, 0), (-1, 1), (-2, 0), (1, -1), (0, -2), (0, -3), (-1, 1), (2, 1), (-1, 3), (1, 1), (-1, 2)]
+RESONANCE_LIST_X = [(1, 0, 0), (0, 1, 0), (-2, 0, 0), (0, 2, 0), (-3, 0, 0), (-1, -1, 0), (2, -2, 0), (0, -2, 0), (1, -2, 0), (-1, 3, 0), (1, 2, 0), (-2, 1, 0), (1, 1, 0), (2, 0, 0), (-1, -2, 0), (3, 0, 0), (0, 0, 1)]
+RESONANCE_LIST_Y = [(0, 1, 0), (1, 0, 0), (-1, 1, 0), (-2, 0, 0), (1, -1, 0), (0, -2, 0), (0, -3, 0), (-1, 1, 0), (2, 1, 0), (-1, 3, 0), (1, 1, 0), (-1, 2, 0), (0, 0, 1)]
 
+def _parse_args():
+    parser = OptionParser()
+    (_, args) = parser.parse_args()
+    return int(args[0]),int(args[1])
 
-def main():
+def main(turnNo1,turnNo2):
     output_dir = "./"
-    tune_x = 44
-    tune_y = 39
-    t_x = 0.44
-    t_y = 0.39
-    for i in range (1,2):
-        input_sdds_file_path = "Kick_1503_1.46x0.34_" + str(i) #/afs/cern.ch/work/l/lmalina/ESRF/ATNoScans/
-        turnNo=200 + 10*i
-        print input_sdds_file_path,turnNo
-        start = time.time()
-        drive_runner.run_drive(input_sdds_file_path, 0, turnNo, tune_x, tune_y, nat_tune_x=tune_x, nat_tune_y=tune_y, clean_up=False, stdout=open("drive_output.txt", "w"))
-        print "Drive took:", time.time() - start
+    tx=0.268
+    ty=0.325
+    tz=0.00045
+    input_sdds_file_path = "SVDFFT/Beam1@Turn@2016_06_10@02_17_15_001_0.sdds" 
+    start = time.time()
+    analyze_tbt_data(input_sdds_file_path, output_dir, tx, ty, tz, turnNo1, turnNo2)
+    print "You took:", time.time() - start
+    
 
-        start = time.time()
-        analyze_tbt_data(input_sdds_file_path, output_dir, t_x, t_y, turnNo)
-        print "You took:", time.time() - start
-        
-
-
-def analyze_tbt_data(input_sdds_file_path, output_dir, tune_x, tune_y, turnNo):
+def analyze_tbt_data(input_sdds_file_path, output_dir, tune_x, tune_y, tune_z, turnNo1, turnNo2):
     raw_sdds_data = SDDSReader(input_sdds_file_path)
     pool = Pool()
 
-    linx_outfile = _create_lin_file(input_sdds_file_path+"b_linx", "x")
-    liny_outfile = _create_lin_file(input_sdds_file_path+"b_liny", "y")
+    linx_outfile = _create_lin_file(input_sdds_file_path+"_linx", "x")
+    liny_outfile = _create_lin_file(input_sdds_file_path+"_liny", "y")
     bpm_results_x = []
     bpm_results_y = []
     tune_tolerance = 0.01
 
     for bpm_data in raw_sdds_data.records:
         if bpm_data[0] == "0":
-            pool.apply_async(process_single_bpm, (bpm_data, tune_x, tune_y, tune_tolerance, turnNo), callback=lambda results: _append_single_bpm_results(results, bpm_results_x))
-            #_write_single_bpm_results(linx_outfile, apply(process_single_bpm, (bpm_data, tune_x, tune_y, tune_tolerance,turnNo)), bpm_results_x)
+            pool.apply_async(process_single_bpm, (bpm_data, tune_x, tune_y, tune_z, tune_tolerance, turnNo1, turnNo2), callback=lambda results: _append_single_bpm_results(results, bpm_results_x))
         elif bpm_data[0] == "1":
-            pool.apply_async(process_single_bpm, (bpm_data, tune_x, tune_y, tune_tolerance, turnNo), callback=lambda results: _append_single_bpm_results(results, bpm_results_y))
-            #_write_single_bpm_results(liny_outfile, apply(process_single_bpm, (bpm_data, tune_x, tune_y, tune_tolerance,turnNo)), bpm_results_y)
+            pool.apply_async(process_single_bpm, (bpm_data, tune_x, tune_y, tune_z, tune_tolerance, turnNo1, turnNo2), callback=lambda results: _append_single_bpm_results(results, bpm_results_y))
     pool.close()
     pool.join()
     
@@ -82,22 +75,22 @@ def analyze_tbt_data(input_sdds_file_path, output_dir, tune_x, tune_y, turnNo):
     liny_outfile.write_to_file()
 
 
-def process_single_bpm(bpm_data, tune_x, tune_y, tune_tolerance, turnNo):
+def process_single_bpm(bpm_data, tune_x, tune_y, tune_z, tune_tolerance, turnNo1, turnNo2):
     bpm_plane = bpm_data[0]
     bpm_name = bpm_data[1]
     bpm_position = bpm_data[2]
-    bpm_samples = np.array(map(float, bpm_data[3:turnNo+3]))
+    bpm_samples = np.array(map(float, bpm_data[turnNo1+3:turnNo2+3]))
 
     if bpm_plane == "0":
-        main_resonance = (1, 0)
+        main_resonance = (1, 0, 0)
         resonance_list = RESONANCE_LIST_X
     elif bpm_plane == "1":
-        main_resonance = (0, 1)
+        main_resonance = (0, 1, 0)
         resonance_list = RESONANCE_LIST_Y
 
     frequencies, coefficients = jacobsen.laskar_method(bpm_samples, 300)
     resonances = jacobsen.resonance_search(frequencies, coefficients,
-                                           tune_x, tune_y, tune_tolerance, resonance_list)
+                                           tune_x, tune_y, tune_z, tune_tolerance, resonance_list)
     
     tune, main_coefficient = resonances[main_resonance]
     amplitude = np.abs(main_coefficient)
@@ -119,10 +112,10 @@ def _write_single_bpm_results(lin_outfile, bpm_results):
     row = [bpm_results.name, bpm_results.position, 0, 0, bpm_results.tune, 0, bpm_results.peak_to_peak, bpm_results.closed_orbit, bpm_results.closed_orbit_rms, bpm_results.amplitude, bpm_results.phase, bpm_results.avphase]
     if bpm_results.plane == "0":
         resonance_list = RESONANCE_LIST_X
-        main_resonance = (1, 0)
+        main_resonance = (1, 0, 0)
     elif bpm_results.plane == "1":
         resonance_list = RESONANCE_LIST_Y
-        main_resonance = (0, 1)
+        main_resonance = (0, 1, 0)
     for resonance in resonance_list:
         if resonance != main_resonance:
             if resonance in bpm_results.resonances:
@@ -146,9 +139,24 @@ def _append_single_bpm_results(bpm_results, bpm_results_list):
 def _create_lin_file(file_path, plane):
     lin_outfile = tfs_file_writer.TfsFileWriter(file_path)
     if plane.lower() == "x":
-        headers = ["NAME", "S", "BINDEX", "SLABEL", "TUNEX", "NOISE", "PK2PK", "CO", "CORMS", "AMPX", "MUX", "AVG_MUX", "AMP01", "PHASE01", "AMP_20", "PHASE_20", "AMP02", "PHASE02", "AMP_30", "PHASE_30", "AMP_1_1", "PHASE_1_1", "AMP2_2", "PHASE2_2", "AMP0_2", "PHASE0_2", "AMP1_2", "PHASE1_2", "AMP_13", "PHASE_13", "AMP12", "PHASE12", "AMP_21", "PHASE_21", "AMP11", "PHASE11", "AMP20", "PHASE20", "AMP_1_2", "PHASE_1_2", "AMP30", "PHASE30", "NATTUNEX", "NATAMPX"]
+        headers = ["NAME", "S", "BINDEX", "SLABEL", "TUNEX", "NOISE", "PK2PK", "CO", "CORMS", "AMPX", "MUX", "AVG_MUX"] 
+        for resonance in RESONANCE_LIST_X:
+            if resonance==(1,0,0): continue
+            x,y,z=resonance
+            if z==0:resstr=(str(x)+str(y)).replace("-","_") 
+            else:resstr=(str(x)+str(y)+str(z)).replace("-","_") 
+            headers.extend(["AMP"+resstr,"PHASE"+resstr])
+        headers.extend(["NATTUNEX", "NATAMPX"])
+            
     elif plane.lower() == "y":
-        headers = ["NAME", "S", "BINDEX", "SLABEL", "TUNEY", "NOISE", "PK2PK", "CO", "CORMS", "AMPY", "MUY", "AVG_MUY", "AMP10", "PHASE10", "AMP_1_1", "PHASE_1_1", "AMP_20", "PHASE_20", "AMP1_1", "PHASE1_1", "AMP0_2", "PHASE0_2", "AMP0_3", "PHASE0_3", "AMP_11", "PHASE_11", "AMP21", "PHASE21", "AMP_13", "PHASE_13", "AMP11", "PHASE11", "AMP_12", "PHASE_12", "NATTUNEY", "NATAMPY"]
+        headers = ["NAME", "S", "BINDEX", "SLABEL", "TUNEY", "NOISE", "PK2PK", "CO", "CORMS", "AMPY", "MUY", "AVG_MUY"]
+        for resonance in RESONANCE_LIST_Y:
+            if resonance==(0,1,0): continue
+            x,y,z=resonance
+            if z==0:resstr=(str(x)+str(y)).replace("-","_") 
+            else:resstr=(str(x)+str(y)+str(z)).replace("-","_")            
+            headers.extend(["AMP"+resstr,"PHASE"+resstr])
+        headers.extend(["NATTUNEY", "NATAMPY"])   
     else:
         raise ValueError
     lin_outfile.add_column_names(headers)
@@ -184,4 +192,5 @@ class BpmResults(object):
 
 
 if __name__ == "__main__":
-    main()
+    turn1,turn2 = _parse_args()
+    main(turn1,turn2)

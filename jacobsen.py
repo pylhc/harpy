@@ -4,6 +4,7 @@ DFT peak interpolation using the Jacobsen method with bias correction.
 
 import sys
 import numpy as np
+#import numba
 #from matplotlib import pyplot
 
 PI2I = 2 * np.pi * complex(0, 1)
@@ -84,7 +85,7 @@ def laskar_method(samples, num_harmonics):
     return frequencies, coefficients
 
 
-def resonance_search(frequencies, coefficients, tune_x, tune_y, tune_tolerance, resonance_list):
+def resonance_search(frequencies, coefficients, tune_x, tune_y, tune_z, tune_tolerance, resonance_list):
     resonances = {}
     remaining_resonances = resonance_list[:]
     sorted_coefficients, sorted_frequencies = zip(*sorted(zip(coefficients, frequencies),
@@ -94,8 +95,8 @@ def resonance_search(frequencies, coefficients, tune_x, tune_y, tune_tolerance, 
         coefficient = sorted_coefficients[index]
         frequency = sorted_frequencies[index]
         for resonance in remaining_resonances:
-            resonance_h, resonance_v = resonance
-            resonance_freq = (resonance_h * tune_x) + (resonance_v * tune_y)
+            resonance_h, resonance_v, resonance_l = resonance
+            resonance_freq = (resonance_h * tune_x) + (resonance_v * tune_y) + (resonance_l * tune_z)
             if resonance_freq < 0:
                 resonance_freq = 1. + resonance_freq  # [0, 1] domain
             min_freq = resonance_freq - tune_tolerance
@@ -125,7 +126,7 @@ def _plot_decomposition(frequencies, coefficients):
     pyplot.show()
     pyplot.clf()
 
-
+#@numba.jit(nopython=True)
 def _compute_coef(samples, kprime):
     n = len(samples)
     freq = kprime / n
@@ -133,7 +134,7 @@ def _compute_coef(samples, kprime):
     coef = np.sum(exponents * samples)
     return coef
 
-
+#@numba.jit(nopython=True)
 def _get_dft_peak(dft_values, frequency_window):
     r = dft_values
     min_value, max_value = frequency_window
