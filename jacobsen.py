@@ -65,6 +65,7 @@ def laskar_method(samples, num_harmonics):
     n = len(samples)
     coefficients = []
     frequencies = []
+    uniform_samples = np.arange(n)
     for i in range(num_harmonics):
         # Compute this harmonic frequency and coefficient.
         dft_data = np.fft.fft(samples)
@@ -76,7 +77,7 @@ def laskar_method(samples, num_harmonics):
         frequencies.append(frequency)
 
         # Subtract the found pure tune from the signal
-        new_signal = coefficient * np.exp(PI2I * frequency * np.arange(n))
+        new_signal = coefficient * np.exp(PI2I * frequency * uniform_samples)
         samples = samples - new_signal
 
     coefficients, frequencies = zip(*sorted(zip(coefficients, frequencies),
@@ -108,25 +109,7 @@ def resonance_search(frequencies, coefficients, tune_x, tune_y, tune_z, tune_tol
     return resonances
 
 
-def _plot_fft(fft_data):
-    fig, ax = pyplot.subplots()
-    xf = np.linspace(0, 1.0, len(fft_data))
-    ax.set_yscale('log')
-    ax.set_xlim(-0.1, 1.1)
-    ax.plot(xf, np.abs(fft_data))
-    pyplot.show()
-    pyplot.clf()
-
-
-def _plot_decomposition(frequencies, coefficients):
-    fig, ax = pyplot.subplots()
-    ax.set_yscale('log')
-    ax.set_ylim([1e-4,2])
-    ax.bar(frequencies, np.abs(coefficients), width=0.001)
-    pyplot.show()
-    pyplot.clf()
-
-#@numba.jit(nopython=True)
+# @numba.jit(nopython=True)
 def _compute_coef(samples, kprime):
     n = len(samples)
     freq = kprime / n
@@ -134,7 +117,8 @@ def _compute_coef(samples, kprime):
     coef = np.sum(exponents * samples)
     return coef
 
-#@numba.jit(nopython=True)
+
+# @numba.jit(nopython=True)
 def _get_dft_peak(dft_values, frequency_window):
     r = dft_values
     min_value, max_value = frequency_window

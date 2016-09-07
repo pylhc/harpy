@@ -26,6 +26,11 @@ RESONANCE_LIST_Y = [(0, 1, 0), (1, 0, 0), (-1, 1, 0), (-2, 0, 0), (1, -1, 0), (0
                     (0, 0, 1)]
 
 
+class RunModes:
+    PARALLEL, SEQUENTIAL = range(2)
+RUN_MODE = RunModes.PARALLEL
+
+
 def _parse_args():
     parser = OptionParser()
     (_, args) = parser.parse_args()
@@ -60,11 +65,17 @@ def analyze_tbt_data(input_sdds_file_path, output_dir, tune_x, tune_y, tune_z, t
             bpm_results = bpm_results_y
         else:
             continue
-        pool.apply_async(
-            process_single_bpm,
-            (bpm_data, tune_x, tune_y, tune_z, tune_tolerance, turn_no_1, turn_no_2),
-            callback=lambda results: _append_single_bpm_results(results, bpm_results)
-        )
+        if RUN_MODE == RunModes.PARALLEL:
+            pool.apply_async(
+                process_single_bpm,
+                (bpm_data, tune_x, tune_y, tune_z, tune_tolerance, turn_no_1, turn_no_2),
+                callback=bpm_results.append
+            )
+        elif RUN_MODE == RunModes.SEQUENTIAL:
+            _append_single_bpm_results(
+                process_single_bpm(bpm_data, tune_x, tune_y, tune_z, tune_tolerance, turn_no_1, turn_no_2),
+                bpm_results
+            )
     pool.close()
     pool.join()
 
