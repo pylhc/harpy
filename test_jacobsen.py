@@ -58,6 +58,8 @@ def analyze_tbt_data(input_sdds_file_path, output_dir, tune_x, tune_y, tune_z, t
             bpm_results = bpm_results_x
         elif bpm_data[0] == "1":
             bpm_results = bpm_results_y
+        else:
+            continue
         pool.apply_async(
             process_single_bpm,
             (bpm_data, tune_x, tune_y, tune_z, tune_tolerance, turn_no_1, turn_no_2),
