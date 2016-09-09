@@ -2,9 +2,9 @@
 DFT peak interpolation using the Jacobsen method with bias correction.
 """
 
+from __future__ import print_function
 import sys
 import numpy as np
-# import numba
 
 PI2I = 2 * np.pi * complex(0, 1)
 
@@ -108,7 +108,7 @@ def resonance_search(frequencies, coefficients, tune_x, tune_y, tune_z, tune_tol
     return resonances
 
 
-def _compute_coef(samples, kprime):
+def _compute_coef_dft(samples, kprime):
     n = len(samples)
     freq = kprime / n
     exponents = np.exp(-PI2I * freq * np.arange(n))
@@ -116,8 +116,7 @@ def _compute_coef(samples, kprime):
     return coef
 
 
-# @numba.jit(nopython=True)
-def _goertzel(samples, kprime):
+def _compute_coef_goertzel(samples, kprime):
     n = len(samples)
     a = 2 * np.pi * (kprime / n)
     b = 2 * np.cos(a)
@@ -143,6 +142,15 @@ def _get_dft_peak(dft_values, frequency_window):
     max_k = max_value * n
     k = np.argmax(np.abs(dft_values[min_k:max_k + 1])) + min_k
     return k, n, r
+
+
+try:
+    import numba
+    _compute_coef = numba.jit(_compute_coef_goertzel)
+    print("Numba found, using JIT compiled Goertzel algorithm.")
+except ImportError:
+    _compute_coef = _compute_coef_dft
+    print("Numba not found, using DFT method.")
 
 
 if __name__ == "__main__":
