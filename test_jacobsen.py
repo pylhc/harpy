@@ -34,7 +34,10 @@ RUN_MODE = RunModes.PARALLEL
 def _parse_args():
     parser = OptionParser()
     (_, args) = parser.parse_args()
-    return int(args[0]), int(args[1])
+    if len(args) == 2:
+        return int(args[0]), int(args[1])
+    else:
+        return None, None
 
 
 def main(turn_no_1, turn_no_2):
@@ -43,6 +46,9 @@ def main(turn_no_1, turn_no_2):
     ty = 0.325
     tz = 0.00045
     input_sdds_file_path = "SVDFFT/Beam1@Turn@2016_06_10@02_17_15_001_0.sdds"
+    if turn_no_1 is not None and turn_no_2 is not None:
+        if turn_no_1 >= turn_no_2:
+            raise ValueError("turn_no_1=" + str(turn_no_1) + " has to be lower than turn_no_2=" + str(turn_no_2))
     start = time.time()
     analyze_tbt_data(input_sdds_file_path, output_dir, tx, ty, tz, turn_no_1, turn_no_2)
     print "You took:", time.time() - start
@@ -99,10 +105,14 @@ def analyze_tbt_data(input_sdds_file_path, output_dir, tune_x, tune_y, tune_z, t
 
 
 def process_single_bpm(bpm_data, tune_x, tune_y, tune_z, tune_tolerance, turn_no_1, turn_no_2):
-    bpm_plane = bpm_data[0]
-    bpm_name = bpm_data[1]
-    bpm_position = bpm_data[2]
-    bpm_samples = np.array(map(float, bpm_data[turn_no_1 + 3:turn_no_2 + 3]))
+    bpm_plane = bpm_data.pop(0)
+    bpm_name = bpm_data.pop(0)
+    bpm_position = bpm_data.pop(0)
+
+    data_length = len(bpm_data)
+    start_index = turn_no_1 if turn_no_1 is not None else 0
+    end_index = turn_no_2 + 1 if turn_no_2 is not None and turn_no_2 < data_length else data_length
+    bpm_samples = np.array(map(float, bpm_data[start_index:end_index]))
 
     if bpm_plane == "0":
         main_resonance = (1, 0, 0)
