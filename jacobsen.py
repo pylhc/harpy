@@ -6,7 +6,8 @@ from __future__ import print_function
 import sys
 import numpy as np
 
-PI2I = 2 * np.pi * complex(0, 1)
+I = complex(0, 1)
+PI2I = 2 * np.pi * I
 
 
 def jacobsen(dft_values, frequency_window):
@@ -64,20 +65,20 @@ def laskar_method(samples, num_harmonics):
     n = len(samples)
     coefficients = []
     frequencies = []
-    uniform_samples = np.arange(n)
+    uniform_freqs = np.arange(n, dtype=np.float64) / n
+    dft_data = _fft(samples)
     for i in range(num_harmonics):
         # Compute this harmonic frequency and coefficient.
-        dft_data = np.fft.fft(samples)
         frequency = jacobsen(dft_data, (0, len(dft_data)))
-        coefficient = _compute_coef(samples, frequency * n) / n
+        coefficient = _compute_coef_freq_space(dft_data, uniform_freqs, frequency, n)
 
         # Store frequency and amplitude
         coefficients.append(coefficient)
         frequencies.append(frequency)
 
         # Subtract the found pure tune from the signal
-        new_signal = coefficient * np.exp(PI2I * frequency * uniform_samples)
-        samples = samples - new_signal
+        new_signal_dft =  _sum_formula(coefficient, frequency, uniform_freqs, n)
+        dft_data = dft_data - new_signal_dft
 
     coefficients, frequencies = zip(*sorted(zip(coefficients, frequencies),
                                             key=lambda tuple: np.abs(tuple[0]),
@@ -108,30 +109,12 @@ def resonance_search(frequencies, coefficients, tune_x, tune_y, tune_z, tune_tol
     return resonances
 
 
-def _compute_coef_dft(samples, kprime):
-    n = len(samples)
-    freq = kprime / n
-    exponents = np.exp(-PI2I * freq * np.arange(n))
-    coef = np.sum(exponents * samples)
-    return coef
-
-
-def _compute_coef_goertzel(samples, kprime):
-    n = len(samples)
-    a = 2 * np.pi * (kprime / n)
-    b = 2 * np.cos(a)
-    c = np.exp(-complex(0, 1) * a)
-    d = np.exp(-complex(0, 1) * ((2 * np.pi * kprime) / n) * (n - 1))
-    s0 = 0.
-    s1 = 0.
-    s2 = 0.
-    for i in range(n - 1):
-        s0 = samples[i] + b * s1 - s2
-        s2 = s1
-        s1 = s0
-    s0 = samples[n - 1] + b * s1 - s2
-    y = s0 - s1 * c
-    return y * d
+def _compute_coef_freq_space(dft_values, uniform_freqs, fprime, n):
+    if fprime in uniform_freqs:
+        return dft_values[fprime * n] / n
+    a = np.exp(PI2I * (uniform_freqs - fprime) * n) - 1
+    b = np.exp(PI2I * (uniform_freqs - fprime)) - 1
+    return np.sum(dft_values / n * (a / b)) / n
 
 
 def _get_dft_peak(dft_values, frequency_window):
@@ -144,14 +127,34 @@ def _get_dft_peak(dft_values, frequency_window):
     return k, n, r
 
 
+def _sum_formula(coefficient, fp, fk, n):
+    """
+    This is equivalent to the DFT of a pure tone of frequency fp.
+    It is the formula for the sum of the series:
+    sum(exp(2 pi i (fp - fk) n) with n from 0 to N - 1)
+    fp is the signal real frequency, fk the frequency of each
+    DFT bin and n (N in the formula) the size of the DFT.
+    """
+    if fp in fk:
+        answer = np.zeros(n, dtype=np.complex128)
+        answer[fp * n] = coefficient * n
+        return answer
+    a = np.exp(2 * np.pi * I * n * (fp - fk)) - 1
+    b = np.exp(2 * np.pi * I * (fp - fk)) - 1
+    return coefficient * (a / b)
+
+
+# Conditional imports #
 try:
-    import numba
-    _compute_coef = numba.jit(_compute_coef_goertzel)
-    print("Numba found, using JIT compiled Goertzel algorithm.")
+    from scipy.fftpack import fft as scipy_fft
+    _fft = scipy_fft
+    print("Scipy found, using scipy FFT.")
 except ImportError:
-    _compute_coef = _compute_coef_dft
-    print("Numba not found, using DFT method.")
+    from numpy.fft import fft as numpy_fft
+    _fft = numpy_fft
+    print("Scipy not found, using numpy FFT.")
+######################
 
 
 if __name__ == "__main__":
-    print >> sys.stderr, "This module is meant to be imported"
+    print("This module is meant to be imported", file=sys.stderr)
