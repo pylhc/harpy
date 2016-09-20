@@ -102,6 +102,15 @@ def _compute_coef_freq_space(dft_values, uniform_freqs, fprime, n):
     return np.sum(dft_values / n * (a / b)) / n
 
 
+def _compute_coef_freq_space_jit(dft_values, uniform_freqs, fprime, n):
+    coefficient = complex(0.0, 0.0)
+    for i in range(n):
+        a = np.exp(PI2I * (uniform_freqs[i] - fprime) * n) - 1
+        b = np.exp(PI2I * (uniform_freqs[i] - fprime)) - 1
+        coefficient += dft_values[i] / n * (a / b)
+    return coefficient / n
+
+
 def _get_dft_peak(dft_values, frequency_window):
     r = dft_values
     min_value, max_value = frequency_window
@@ -125,7 +134,38 @@ def _sum_formula(coefficient, fp, fk, n):
     return coefficient * (a / b)
 
 
+def _sum_formula_jit(coefficient, fp, fk, n, result):
+    """
+    This is the same as _sum_formula, but it can be compiled
+    with Numba to be way faster.
+    """
+    signal_dft = result
+    for i in range(n):
+        signal_dft[i] = coefficient * ((np.exp(PI2I * n * (fp - fk[i])) - 1) /
+                                       (np.exp(PI2I * (fp - fk[i])) - 1))
+
+
+def _sum_formula_jit_wrapper(coefficient, fp, fk, n):
+    """
+    One cannot create or return Numpy array in Numba.
+    This wrapper makes the transformation transparent to laskar_method.
+    """
+    result = np.zeros(n, dtype=np.complex128)
+    _sum_formula_jit(coefficient, fp, fk, n, result)
+    return result
+
+
 # Conditional imports #
+
+try:
+    from numba import jit
+    _sum_formula_jit = jit(_sum_formula_jit, nopython=True)
+    _sum_formula = _sum_formula_jit_wrapper  # noqa
+    _compute_coef_freq_space = jit(_compute_coef_freq_space_jit, nopython=True)  # noqa
+    print("Using compiled Numba functions.")
+except ImportError:
+    print("Numba not found, using numpy functions.")
+
 try:
     from scipy.fftpack import fft as scipy_fft
     _fft = scipy_fft
@@ -134,6 +174,7 @@ except ImportError:
     from numpy.fft import fft as numpy_fft
     _fft = numpy_fft
     print("Scipy not found, using numpy FFT.")
+
 ######################
 
 
