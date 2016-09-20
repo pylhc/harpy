@@ -6,8 +6,8 @@ from __future__ import print_function
 import sys
 import numpy as np
 
-I = complex(0, 1)
-PI2I = 2 * np.pi * I
+PI2I = 2 * np.pi * complex(0, 1)
+CZERO = complex(0, 0)
 
 
 def jacobsen(dft_values, frequency_window):
@@ -42,25 +42,6 @@ def parabolic_fit(dft_values, frequency_window, k):
     return np.complex128(complex(real_peak, imag_peak))
 
 
-def grid_search(samples, dft_values, frequency_window, iterations):
-    k, n, r = _get_dft_peak(dft_values, frequency_window)
-    delta = 0.
-    for i in range(iterations):
-        current_coef_p = _compute_coef(samples, k + delta + 0.5)
-        current_coef_n = _compute_coef(samples, k + delta - 0.5)
-        delta += np.real((current_coef_p + current_coef_n) / (current_coef_p - current_coef_n)) / 2
-        # delta += ((abs(current_coef_p) - abs(current_coef_n)) / (abs(current_coef_p) + abs(current_coef_n))) / 2
-    return (k + delta) / n
-
-
-def brute_force_search(samples, dft_values, frequency_window, grid_points_num):
-    k, n, r = _get_dft_peak(dft_values, frequency_window)
-    grid = np.linspace(-0.5, 0.5, grid_points_num)
-    freqs = [(k + d) / n for d in grid]
-    values = [np.abs(_compute_coef(samples, k + point)) for point in grid]
-    return freqs[np.argmax(values) + 1]
-
-
 def laskar_method(samples, num_harmonics):
     n = len(samples)
     coefficients = []
@@ -70,14 +51,20 @@ def laskar_method(samples, num_harmonics):
     for i in range(num_harmonics):
         # Compute this harmonic frequency and coefficient.
         frequency = jacobsen(dft_data, (0, len(dft_data)))
-        coefficient = _compute_coef_freq_space(dft_data, uniform_freqs, frequency, n)
-
-        # Store frequency and amplitude
-        coefficients.append(coefficient)
         frequencies.append(frequency)
 
+        # If the frequency found is in one of the bins just
+        # remove it form the signal.
+        if frequency in uniform_freqs:
+            coefficients.append(dft_data[frequency * n] / n)
+            dft_data[frequency * n] = CZERO
+            continue
+
+        coefficient = _compute_coef_freq_space(dft_data, uniform_freqs, frequency, n)
+        coefficients.append(coefficient)
+
         # Subtract the found pure tune from the signal
-        new_signal_dft =  _sum_formula(coefficient, frequency, uniform_freqs, n)
+        new_signal_dft = _sum_formula(coefficient, frequency, uniform_freqs, n)
         dft_data = dft_data - new_signal_dft
 
     coefficients, frequencies = zip(*sorted(zip(coefficients, frequencies),
@@ -110,8 +97,6 @@ def resonance_search(frequencies, coefficients, tune_x, tune_y, tune_z, tune_tol
 
 
 def _compute_coef_freq_space(dft_values, uniform_freqs, fprime, n):
-    if fprime in uniform_freqs:
-        return dft_values[fprime * n] / n
     a = np.exp(PI2I * (uniform_freqs - fprime) * n) - 1
     b = np.exp(PI2I * (uniform_freqs - fprime)) - 1
     return np.sum(dft_values / n * (a / b)) / n
@@ -135,12 +120,8 @@ def _sum_formula(coefficient, fp, fk, n):
     fp is the signal real frequency, fk the frequency of each
     DFT bin and n (N in the formula) the size of the DFT.
     """
-    if fp in fk:
-        answer = np.zeros(n, dtype=np.complex128)
-        answer[fp * n] = coefficient * n
-        return answer
-    a = np.exp(2 * np.pi * I * n * (fp - fk)) - 1
-    b = np.exp(2 * np.pi * I * (fp - fk)) - 1
+    a = np.exp(PI2I * n * (fp - fk)) - 1
+    b = np.exp(PI2I * (fp - fk)) - 1
     return coefficient * (a / b)
 
 
