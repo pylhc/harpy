@@ -15,6 +15,7 @@ else:
 from Python_Classes4MAD import metaclass  # noqa
 from Python_Classes4MAD.SDDSIlya import SDDSReader  # noqa
 from Utilities import tfs_file_writer  # noqa
+from Utilities import iotools  # noqa
 
 PI2I = 2 * np.pi * complex(0, 1)
 
@@ -60,6 +61,9 @@ def analyze_tbt_data(input_sdds_file_path, output_dir, tune_x, tune_y, tune_z, t
 
     linx_outfile = _create_lin_file(input_sdds_file_path + "_linx", "x")
     liny_outfile = _create_lin_file(input_sdds_file_path + "_liny", "y")
+    spectr_outdir = os.path.join(os.path.dirname(input_sdds_file_path), "BPM")
+    iotools.create_dirs(spectr_outdir)
+
     bpm_results_x = []
     bpm_results_y = []
     tune_tolerance = 0.01
@@ -74,12 +78,14 @@ def analyze_tbt_data(input_sdds_file_path, output_dir, tune_x, tune_y, tune_z, t
         if RUN_MODE == RunModes.PARALLEL:
             pool.apply_async(
                 process_single_bpm,
-                (bpm_data, tune_x, tune_y, tune_z, tune_tolerance, turn_no_1, turn_no_2),
+                (bpm_data, tune_x, tune_y, tune_z, tune_tolerance,
+                 turn_no_1, turn_no_2, spectr_outdir),
                 callback=bpm_results.append
             )
         elif RUN_MODE == RunModes.SEQUENTIAL:
             _append_single_bpm_results(
-                process_single_bpm(bpm_data, tune_x, tune_y, tune_z, tune_tolerance, turn_no_1, turn_no_2),
+                process_single_bpm(bpm_data, tune_x, tune_y, tune_z, tune_tolerance,
+                                   turn_no_1, turn_no_2, spectr_outdir),
                 bpm_results
             )
     pool.close()
@@ -104,7 +110,8 @@ def analyze_tbt_data(input_sdds_file_path, output_dir, tune_x, tune_y, tune_z, t
     liny_outfile.write_to_file()
 
 
-def process_single_bpm(bpm_data, tune_x, tune_y, tune_z, tune_tolerance, turn_no_1, turn_no_2):
+def process_single_bpm(bpm_data, tune_x, tune_y, tune_z, tune_tolerance,
+                       turn_no_1, turn_no_2, spectr_outdir):
     bpm_plane = bpm_data.pop(0)
     bpm_name = bpm_data.pop(0)
     bpm_position = bpm_data.pop(0)
@@ -125,6 +132,7 @@ def process_single_bpm(bpm_data, tune_x, tune_y, tune_z, tune_tolerance, turn_no
     resonances = jacobsen.resonance_search(frequencies, coefficients,
                                            tune_x, tune_y, tune_z, tune_tolerance, resonance_list)
 
+    _write_bpm_spectrum(spectr_outdir, bpm_name, bpm_plane, np.abs(coefficients), frequencies)
     tune, main_coefficient = resonances[main_resonance]
     amplitude = np.abs(main_coefficient)
     phase = np.angle(main_coefficient)
@@ -139,6 +147,21 @@ def process_single_bpm(bpm_data, tune_x, tune_y, tune_z, tune_tolerance, turn_no
     bpm_results.compute_orbit(bpm_samples)
     bpm_results.samples = (bpm_samples - np.average(bpm_samples))
     return bpm_results
+
+
+def _write_bpm_spectrum(spectr_outdir, bpm_name, bpm_plane, amplitudes, freqs):
+    COLUMN_NAMES = ["FREQ", "AMP"]
+    if bpm_plane == "0":
+        suffix = "x"
+    elif bpm_plane == "1":
+        suffix = "y"
+    file_name = bpm_name + "." + suffix
+    spectr_outfile = tfs_file_writer.TfsFileWriter(os.path.join(spectr_outdir, file_name))
+    spectr_outfile.add_column_names(COLUMN_NAMES)
+    spectr_outfile.add_column_datatypes(["%le"] * (len(COLUMN_NAMES)))
+    for i in range(len(amplitudes)):
+        spectr_outfile.add_table_row([freqs[i], amplitudes[i]])
+    spectr_outfile.write_to_file()
 
 
 def _write_single_bpm_results(lin_outfile, bpm_results):
