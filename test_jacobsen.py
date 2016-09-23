@@ -128,7 +128,11 @@ def process_single_bpm(bpm_data, tune_x, tune_y, tune_z, tune_tolerance,
         main_resonance = (0, 1, 0)
         resonance_list = RESONANCE_LIST_Y
 
-    frequencies, coefficients = jacobsen.laskar_method_freq_space(bpm_samples, 300)
+    if _is_prime(len(bpm_samples)):
+        # If we have a prime number of turns, use the frequency space method.
+        frequencies, coefficients = jacobsen.laskar_method_freq_space(bpm_samples, 300)
+    else:
+        frequencies, coefficients = jacobsen.laskar_method_time_space(bpm_samples, 300)
     resonances = jacobsen.resonance_search(frequencies, coefficients,
                                            tune_x, tune_y, tune_z, tune_tolerance, resonance_list)
 
@@ -147,6 +151,26 @@ def process_single_bpm(bpm_data, tune_x, tune_y, tune_z, tune_tolerance,
     bpm_results.compute_orbit(bpm_samples)
     bpm_results.samples = (bpm_samples - np.average(bpm_samples))
     return bpm_results
+
+
+def _is_prime(n):
+    if n == 2 or n == 3:
+        return True
+    if n < 2 or n % 2 == 0:
+        return False
+    if n < 9:
+        return True
+    if n % 3 == 0:
+        return False
+    r = int(n**0.5)
+    f = 5
+    while f <= r:
+        if n % f == 0:
+            return False
+        if n % (f + 2) == 0:
+            return False
+        f += 6
+    return True
 
 
 def _write_bpm_spectrum(spectr_outdir, bpm_name, bpm_plane, amplitudes, freqs):
