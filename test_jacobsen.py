@@ -128,7 +128,7 @@ def process_single_bpm(bpm_data, tune_x, tune_y, tune_z, tune_tolerance,
         main_resonance = (0, 1, 0)
         resonance_list = RESONANCE_LIST_Y
 
-    frequencies, coefficients = jacobsen.laskar_method(bpm_samples, 300)
+    frequencies, coefficients = jacobsen.laskar_method_freq_space(bpm_samples, 300)
     resonances = jacobsen.resonance_search(frequencies, coefficients,
                                            tune_x, tune_y, tune_z, tune_tolerance, resonance_list)
 
