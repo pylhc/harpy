@@ -36,7 +36,8 @@ RESONANCE_LISTS = {"X": ((1, 0, 0), (0, 1, 0), (-2, 0, 0), (0, 2, 0), (-3, 0, 0)
 MAIN_LINES = {"X": (1, 0, 0),
               "Y": (0, 1, 0)}
 
-N_TO_P = {"0": "X", "1": "Y"}
+N_TO_P = {"0": "X",
+          "1": "Y"}
 
 DEF_TUNE_TOLERANCE = 0.001
 
@@ -52,10 +53,15 @@ class Drive():
                  tolerance=DEF_TUNE_TOLERANCE,
                  start_turn=0,
                  end_turn=None,
+                 output_dir=None,
                  sequential=False):
         self._input_file = input_file
+        if output_dir is None:
+            self._output_dir = os.path.dirname(input_file)
+        else:
+            self._output_dir = output_dir
         self._spectr_outdir = os.path.join(
-            os.path.dirname(input_file), "BPM"
+            self._output_dir, "BPM"
         )
         self._tunes = tunes
         self._nattunes = nattunes
@@ -67,13 +73,9 @@ class Drive():
 
     def _analyze_tbt_data(self):
         (lin_outfile_x,
-         lin_outfile_y) = self._create_lin_files(self._input_file)
+         lin_outfile_y) = self._create_lin_files()
         self._lin_outfiles = {"X": lin_outfile_x,
                               "Y": lin_outfile_y}
-        self._spectr_outdir = os.path.join(
-            os.path.dirname(self._input_file),
-            "BPM"
-        )
         iotools.create_dirs(self._spectr_outdir)
         full_results = self._loop_through_records()
         self._write_full_results(full_results)
@@ -119,11 +121,12 @@ class Drive():
             tune_list.append(results.tune)
         return np.mean(tune_list), np.std(tune_list)
 
-    def _create_lin_files(self, file_path):
+    def _create_lin_files(self):
         lin_outfiles = []
         for plane in "X", "Y":
+            file_name = os.path.basename(self._input_file) + "_lin" + plane.lower()
             lin_outfile = tfs_file_writer.TfsFileWriter(
-                file_path + "_lin" + plane.lower()
+                os.path.join(self._output_dir, file_name)
             )
             headers = HEADERS[plane]
             for resonance in RESONANCE_LISTS[plane]:
@@ -151,20 +154,25 @@ class Drive():
                 try:
                     full_plane_results = full_results[N_TO_P[bpm_data[0]]]
                 except KeyError:
-                    continue
-                if self._sequential:
-                    full_plane_results.append(
-                        _process_single_bpm(self, bpm_data)
-                    )
-                else:
-                    pool.apply_async(
-                        _process_single_bpm,
-                        (self, bpm_data),
-                        callback=full_plane_results.append
-                    )
+                    continue  # Comments and empty lines
+                self._launch_single_bpm_processing(bpm_data,
+                                                   full_plane_results,
+                                                   pool)
         pool.close()
         pool.join()
         return full_results
+
+    def _launch_single_bpm_processing(self, bpm_data, results, pool):
+        if self._sequential:
+            results.append(
+                _process_single_bpm(self, bpm_data)
+            )
+        else:
+            pool.apply_async(
+                _process_single_bpm,
+                (self, bpm_data),
+                callback=results.append
+            )
 
 
 # Global space ################################################
@@ -174,13 +182,13 @@ def _process_single_bpm(drive, bpm_data):
     It has to be outside of the classes to make it pickable for
     the multiprocessing module.
     """
-    bpm_processor = BpmProcessor(drive, bpm_data)
+    bpm_processor = _BpmProcessor(drive, bpm_data)
     bpm_results = bpm_processor.do_bpm_analysis()
     return bpm_results
 ###############################################################
 
 
-class BpmProcessor(object):
+class _BpmProcessor(object):
     def __init__(self, drive, bpm_data):
         self._drive = drive
         self._bpm_data = bpm_data
@@ -208,7 +216,7 @@ class BpmProcessor(object):
         amplitude = np.abs(main_coefficient)
         phase = np.angle(main_coefficient)
 
-        bpm_results = BpmResults(self)
+        bpm_results = _BpmResults(self)
         bpm_results.tune = tune
         bpm_results.phase = phase / (2 * np.pi)
         bpm_results.amplitude = amplitude
@@ -222,7 +230,7 @@ class BpmProcessor(object):
     def _compute_bpm_samples(self, bpm_data):
         data_length = len(bpm_data)
         if (self._drive._end_turn is not None and self._drive._end_turn < data_length):
-            end_index = self._end_turn + 1
+            end_index = self._drive._end_turn
         else:
             end_index = data_length
         return np.array(
@@ -264,7 +272,7 @@ class BpmProcessor(object):
         return resonances
 
 
-class BpmResults(object):
+class _BpmResults(object):
 
     def __init__(self, bpm_processor):
         self.name = bpm_processor._name

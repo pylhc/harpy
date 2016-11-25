@@ -8,13 +8,13 @@ class HarmonicAnalisys(object):
 
     def __init__(self, samples):
         self._samples = samples
-        self._lenght = len(samples)
-        self._int_range = np.arange(self._lenght)
-        self._hann_window = np.hanning(self._lenght)
+        self._length = len(samples)
+        self._int_range = np.arange(self._length)
+        self._hann_window = np.hanning(self._length)
 
     def laskar_method(self, num_harmonics):
         samples = self._samples[:]  # Copy the samples array.
-        n = self._lenght
+        n = self._length
         coefficients = []
         frequencies = []
         for _ in range(num_harmonics):
@@ -42,7 +42,7 @@ class HarmonicAnalisys(object):
         signal using the three highest peaks in the FFT.
         """
         k = np.argmax(np.abs(dft_values))
-        n = self._lenght
+        n = self._length
         r = dft_values
         delta = np.tan(np.pi / n) / (np.pi / n)
         kp = (k + 1) % n
@@ -55,7 +55,7 @@ class HarmonicAnalisys(object):
         Computes the coefficient of the Discrete Time Fourier
         Transform corresponding to the given frequency (kprime).
         """
-        n = self._lenght
+        n = self._length
         freq = kprime / n
         exponents = np.exp(-PI2I * freq * self._int_range)
         coef = np.sum(exponents * samples)

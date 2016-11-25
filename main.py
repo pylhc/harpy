@@ -54,6 +54,10 @@ def _parse_args():
         dest="end_turn", type=int,
     )
     parser.add_option(
+        "--output", help="Output directory. The default is the input file directory.",
+        dest="output_dir", type=float,
+    )
+    parser.add_option(
         "--sequential", help="If set, it will run in only one process.",
         dest="sequential", action="store_true",
     )
@@ -69,6 +73,7 @@ def _init_from_args():
     tunes = (options.tunex,
              options.tuney,
              options.tunez)
+    output_dir = options.output_dir
     nattunes = (options.nattunex,
                 options.nattuney,
                 options.nattunez)
@@ -77,7 +82,7 @@ def _init_from_args():
     end_turn = options.end_turn
     sequential = options.sequential
     return Drive(input_file, tunes, nattunes, tolerance,
-                 start_turn, end_turn, sequential)
+                 start_turn, end_turn, output_dir, sequential)
 
 
 if __name__ == "__main__":
