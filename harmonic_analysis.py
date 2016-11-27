@@ -6,11 +6,14 @@ CZERO = complex(0, 0)
 
 class HarmonicAnalisys(object):
 
-    def __init__(self, samples):
+    def __init__(self, samples, zero_pad=False, hann=False):
         self._samples = samples
-        self._length = len(samples)
+        if zero_pad:
+            self._pad_signal()
+        self._length = len(self._samples)
         self._int_range = np.arange(self._length)
-        self._hann_window = np.hanning(self._length)
+        if hann:
+            self._hann_window = np.hanning(self._length)
 
     def laskar_method(self, num_harmonics):
         samples = self._samples[:]  # Copy the samples array.
@@ -35,6 +38,15 @@ class HarmonicAnalisys(object):
                                                 key=lambda tuple: np.abs(tuple[0]),
                                                 reverse=True))
         return frequencies, coefficients
+
+    def _pad_signal(self):
+        length = len(self._samples)
+        pad_length = (1 << (length - 1).bit_length()) - length
+        self._samples = np.pad(
+            self._samples,
+            (0, pad_length),
+            'constant'
+        )
 
     def _jacobsen(self, dft_values, frequency_window):
         """
@@ -72,7 +84,9 @@ class HarmonicAnalisys(object):
         a = 2 * np.pi * (kprime / n)
         b = 2 * np.cos(a)
         c = np.exp(-complex(0, 1) * a)
-        d = np.exp(-complex(0, 1) * ((2 * np.pi * kprime) / n) * (n - 1))
+        d = np.exp(-complex(0, 1) *
+                   ((2 * np.pi * kprime) / n) *
+                   (n - 1))
         s0 = 0.
         s1 = 0.
         s2 = 0.
