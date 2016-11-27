@@ -209,6 +209,8 @@ class _BpmProcessor(object):
         )
         self._write_bpm_spectrum(self._name, self._plane,
                                  np.abs(coefficients), frequencies)
+        if self._drive._sequential:
+            print("Done:", self._name, ", plane:", self._plane)
         return self._get_bpm_results(resonances, frequencies, coefficients)
 
     def _get_bpm_results(self, resonances, frequencies, coefficients):
