@@ -12,6 +12,7 @@ class HarmonicAnalisys(object):
             self._pad_signal()
         self._length = len(self._samples)
         self._int_range = np.arange(self._length)
+        self._hann_window = None
         if hann:
             self._hann_window = np.hanning(self._length)
 
@@ -23,7 +24,7 @@ class HarmonicAnalisys(object):
         for _ in range(num_harmonics):
             # Compute this harmonic frequency and coefficient.
             dft_data = HarmonicAnalisys._fft(samples)
-            frequency = self._jacobsen(dft_data, (0, len(dft_data)))
+            frequency = self._jacobsen(dft_data)
             coefficient = self._compute_coef(samples, frequency * n) / n
 
             # Store frequency and amplitude
@@ -39,6 +40,12 @@ class HarmonicAnalisys(object):
                                                 reverse=True))
         return frequencies, coefficients
 
+    def get_signal(self):
+        if self._hann_window is not None:
+            return self._samples * self._hann_window
+        else:
+            return self._samples
+
     def _pad_signal(self):
         length = len(self._samples)
         pad_length = (1 << (length - 1).bit_length()) - length
@@ -48,7 +55,7 @@ class HarmonicAnalisys(object):
             'constant'
         )
 
-    def _jacobsen(self, dft_values, frequency_window):
+    def _jacobsen(self, dft_values):
         """
         This method interpolates the real frequency of the
         signal using the three highest peaks in the FFT.
@@ -67,6 +74,8 @@ class HarmonicAnalisys(object):
         Computes the coefficient of the Discrete Time Fourier
         Transform corresponding to the given frequency (kprime).
         """
+        if self._hann_window is not None:
+            samples = samples * self._hann_window
         n = self._length
         freq = kprime / n
         exponents = np.exp(-PI2I * freq * self._int_range)
@@ -80,7 +89,9 @@ class HarmonicAnalisys(object):
         This function is faster than the previous one if compiled
         with Numba.
         """
-        n = len(samples)
+        if self._hann_window is not None:
+            samples = samples * self._hann_window
+        n = self._length
         a = 2 * np.pi * (kprime / n)
         b = 2 * np.cos(a)
         c = np.exp(-complex(0, 1) * a)
@@ -135,3 +146,33 @@ class HarmonicAnalisys(object):
 HarmonicAnalisys._compute_coef = HarmonicAnalisys._conditional_import_compute_coef()
 HarmonicAnalisys._fft = HarmonicAnalisys._conditional_import_fft()
 #####################################################################################
+
+
+class HarmonicPlotter(object):
+    def __init__(self, harmonic_analisys):
+        import matplotlib.pyplot as plt
+        plt.rcParams['backend'] = "Qt4Agg"
+        self._plt = plt
+        self._harmonic_analisys = harmonic_analisys
+
+    def plot_laskar(self, num_harmonics):
+        (frequencies,
+         coefficients) = self._harmonic_analisys.laskar_method(num_harmonics)
+        self._plt.scatter(frequencies, coefficients)
+        self._show_and_reset()
+
+    def plot_windowed_signal(self):
+        signal = self._harmonic_analisys.get_signal()
+        self._plt.plot(range(len(signal)), signal)
+        self._show_and_reset()
+
+    def plot_fft(self):
+        fft_func = HarmonicAnalisys._fft
+        signal = self._harmonic_analisys.get_signal()
+        fft = fft_func(signal)
+        self._plt.plot(range(len(fft)), np.abs(fft))
+        self._show_and_reset()
+
+    def _show_and_reset(self):
+        self._plt.show()
+        self._plt.clf()

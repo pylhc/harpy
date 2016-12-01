@@ -11,7 +11,6 @@ else:
     sys.path.append("\\\\AFS\\cern.ch\\work\\j\\jcoellod\\public\\Beta-Beat.src")
 
 from Python_Classes4MAD import metaclass  # noqa
-from Python_Classes4MAD.SDDSIlya import SDDSReader  # noqa
 from Utilities import tfs_file_writer  # noqa
 from Utilities import iotools  # noqa
 
@@ -69,6 +68,8 @@ class Drive():
         self._start_turn = start_turn
         self._end_turn = end_turn
         self._sequential = sequential
+        self._bpm_processor_list = None
+        self._compute_resonances_freqs()
         self._analyze_tbt_data()
 
     def _analyze_tbt_data(self):
@@ -77,7 +78,8 @@ class Drive():
         self._lin_outfiles = {"X": lin_outfile_x,
                               "Y": lin_outfile_y}
         iotools.create_dirs(self._spectr_outdir)
-        full_results = self._loop_through_records()
+        self._read_input_file()
+        full_results = self._analyze_all_bpms()
         self._write_full_results(full_results)
 
     def _write_full_results(self, full_results):
@@ -104,15 +106,19 @@ class Drive():
             if resonance != main_resonance:
                 if resonance in bpm_results.resonances:
                     _, coefficient = bpm_results.resonances[resonance]
-                    row.append(np.abs(coefficient) / bpm_results.tune)
+                    row.append(np.abs(coefficient) / bpm_results.amplitude)
                     row.append(np.angle(coefficient) / (2 * np.pi))
                 else:
                     row.append(0.0)
                     row.append(0.0)
 
-        # TODO: Natural tunes
-        row.append(0.0)
-        row.append(0.0)
+        if self._nattunes is not None:
+            natural_coef = bpm_results.resonances["NAT" + bpm_results.plane.upper()]
+            row.append(np.abs(natural_coef) / bpm_results.amplitude)
+            row.append(np.angle(natural_coef) / (2 * np.pi))
+        else:
+            row.append(0.0)
+            row.append(0.0)
         lin_outfile.add_table_row(row)
 
     def _compute_tune_stats(self, bpm_results):
@@ -120,6 +126,26 @@ class Drive():
         for results in bpm_results:
             tune_list.append(results.tune)
         return np.mean(tune_list), np.std(tune_list)
+
+    def _compute_resonances_freqs(self):
+        tune_x, tune_y, tune_z = self._tunes
+        self._resonances_freqs = {}
+        for plane in ("X", "Y"):
+            freqs = [(resonance_h * tune_x) +
+                     (resonance_v * tune_y) +
+                     (resonance_l * tune_z)
+                     for (resonance_h,
+                          resonance_v,
+                          resonance_l) in RESONANCE_LISTS[plane]]
+            # Move to [0, 1] domain.
+            freqs = [freq + 1. if freq < 0. else freq for freq in freqs]
+            self._resonances_freqs[plane] = dict(
+                zip(RESONANCE_LISTS[plane], freqs)
+            )
+        if self._nattunes is not None:
+            nattune_x, nattune_y, _ = self._nattunes  # TODO: nattunez?
+            self._resonances_freqs["X"]["NATX"] = nattune_x
+            self._resonances_freqs["Y"]["NATY"] = nattune_y
 
     def _create_lin_files(self):
         lin_outfiles = []
@@ -145,46 +171,50 @@ class Drive():
             lin_outfiles.append(lin_outfile)
         return lin_outfiles
 
-    def _loop_through_records(self):
-        full_results = {"X": [], "Y": []}
-        pool = multiprocessing.Pool()
+    def _read_input_file(self):
+        self._bpm_processor_list = []
         with open(self._input_file, "r") as records:
             for line in records:
                 bpm_data = line.split()
                 try:
-                    full_plane_results = full_results[N_TO_P[bpm_data[0]]]
+                    bpm_processor = _BpmProcessor(self, bpm_data)
                 except KeyError:
                     continue  # Comments and empty lines
-                self._launch_single_bpm_processing(bpm_data,
-                                                   full_plane_results,
-                                                   pool)
+                self._bpm_processor_list.append(bpm_processor)
+
+    def _analyze_all_bpms(self):
+        full_results = {"X": [], "Y": []}
+        pool = multiprocessing.Pool()
+        for bpm_processor in self._bpm_processor_list:
+            full_plane_results = full_results[bpm_processor._plane]
+            self._launch_single_bpm_analysis(bpm_processor,
+                                             full_plane_results,
+                                             pool)
         pool.close()
         pool.join()
         return full_results
 
-    def _launch_single_bpm_processing(self, bpm_data, results, pool):
+    def _launch_single_bpm_analysis(self, bpm_processor, results, pool):
         if self._sequential:
             results.append(
-                _process_single_bpm(self, bpm_data)
+                _BpmProcessor.do_bpm_analysis(bpm_processor)
             )
         else:
             pool.apply_async(
-                _process_single_bpm,
-                (self, bpm_data),
+                _analyze_single_bpm,
+                (bpm_processor, ),
                 callback=results.append
             )
 
 
 # Global space ################################################
-def _process_single_bpm(drive, bpm_data):
+def _analyze_single_bpm(bpm_processor):
     """
     This function triggers the per BPM data processing.
     It has to be outside of the classes to make it pickable for
     the multiprocessing module.
     """
-    bpm_processor = _BpmProcessor(drive, bpm_data)
-    bpm_results = bpm_processor.do_bpm_analysis()
-    return bpm_results
+    return bpm_processor.do_bpm_analysis()
 ###############################################################
 
 
@@ -197,7 +227,7 @@ class _BpmProcessor(object):
         self._position = bpm_data.pop(0)
         self._samples = self._compute_bpm_samples(bpm_data)
         self._main_resonance = MAIN_LINES[self._plane]
-        self._resonance_list = RESONANCE_LISTS[self._plane]
+        self._resonances_freqs = drive._resonances_freqs[self._plane]
 
     def do_bpm_analysis(self):
         harmonic_analysis = HarmonicAnalisys(self._samples)
@@ -251,27 +281,22 @@ class _BpmProcessor(object):
         spectr_outfile.write_to_file()
 
     def _resonance_search(self, frequencies, coefficients):
-        tune_x, tune_y, tune_z = self._drive._tunes
-        resonances = {}
-        remaining_resonances = list(self._resonance_list[:])
+        found_resonances = {}
         sorted_coefficients, sorted_frequencies = zip(*sorted(zip(coefficients, frequencies),
                                                               key=lambda tuple: np.abs(tuple[0]),
                                                               reverse=True))
         for index in range(len(sorted_frequencies)):
             coefficient = sorted_coefficients[index]
             frequency = sorted_frequencies[index]
-            for resonance in remaining_resonances:
-                resonance_h, resonance_v, resonance_l = resonance
-                resonance_freq = (resonance_h * tune_x) + (resonance_v * tune_y) + (resonance_l * tune_z)
-                if resonance_freq < 0:
-                    resonance_freq = 1. + resonance_freq  # [0, 1] domain
+            for resonance, resonance_freq in self._resonances_freqs.iteritems():
                 min_freq = resonance_freq - self._drive._tolerance
                 max_freq = resonance_freq + self._drive._tolerance
-                if frequency >= min_freq and frequency <= max_freq:
-                    resonances[resonance] = (frequency, coefficient)
-                    remaining_resonances.remove(resonance)
+                if (frequency >= min_freq and
+                        frequency <= max_freq and
+                        resonance not in found_resonances):
+                    found_resonances[resonance] = (frequency, coefficient)
                     break
-        return resonances
+        return found_resonances
 
 
 class _BpmResults(object):
