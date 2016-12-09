@@ -3,11 +3,15 @@ import numpy as np
 PI2I = 2 * np.pi * complex(0, 1)
 CZERO = complex(0, 0)
 
+ZERO_PAD_DEF = True
+HANN_DEF = False
+
 
 class HarmonicAnalisys(object):
 
-    def __init__(self, samples, zero_pad=False, hann=False):
+    def __init__(self, samples, zero_pad=ZERO_PAD_DEF, hann=HANN_DEF):
         self._samples = samples
+        self._compute_orbit()
         if zero_pad:
             self._pad_signal()
         self._length = len(self._samples)
@@ -25,7 +29,10 @@ class HarmonicAnalisys(object):
             # Compute this harmonic frequency and coefficient.
             dft_data = HarmonicAnalisys._fft(samples)
             frequency = self._jacobsen(dft_data)
-            coefficient = self._compute_coef(samples, frequency * n) / n
+            coefficient = HarmonicAnalisys._compute_coef(
+                samples,
+                frequency * n
+            ) / n
 
             # Store frequency and amplitude
             coefficients.append(coefficient)
@@ -46,9 +53,17 @@ class HarmonicAnalisys(object):
         else:
             return self._samples
 
+    def get_coefficient_for_freq(self, freq):
+        return self._compute_coef(self._samples, freq)
+
     def _pad_signal(self):
+        """
+        Pads the signal with zeros to a "good" FFT size.
+        """
         length = len(self._samples)
+        # TODO Think proper pad size
         pad_length = (1 << (length - 1).bit_length()) - length
+        pad_length = 6600 - length
         self._samples = np.pad(
             self._samples,
             (0, pad_length),
@@ -69,29 +84,26 @@ class HarmonicAnalisys(object):
         delta = delta * np.real((r[km] - r[kp]) / (2 * r[k] - r[km] - r[kp]))
         return (k + delta) / n
 
-    def _compute_coef_simple(self, samples, kprime):
+    @staticmethod
+    def _compute_coef_simple(samples, kprime):
         """
         Computes the coefficient of the Discrete Time Fourier
         Transform corresponding to the given frequency (kprime).
         """
-        if self._hann_window is not None:
-            samples = samples * self._hann_window
-        n = self._length
+        n = len(samples)
         freq = kprime / n
-        exponents = np.exp(-PI2I * freq * self._int_range)
+        exponents = np.exp(-PI2I * freq * np.arange(n))
         coef = np.sum(exponents * samples)
         return coef
 
-    def _compute_coef_goertzel(self, samples, kprime):
+    def _compute_coef_goertzel(samples, kprime):
         """
         Computes the coefficient of the Discrete Time Fourier
         Transform corresponding to the given frequency (kprime).
         This function is faster than the previous one if compiled
         with Numba.
         """
-        if self._hann_window is not None:
-            samples = samples * self._hann_window
-        n = self._length
+        n = len(samples)
         a = 2 * np.pi * (kprime / n)
         b = 2 * np.cos(a)
         c = np.exp(-complex(0, 1) * a)
@@ -109,6 +121,11 @@ class HarmonicAnalisys(object):
         y = s0 - s1 * c
         return y * d
 
+    def _compute_orbit(self):
+        self.closed_orbit = np.mean(self._samples)
+        self.closed_orbit_rms = np.std(self._samples)
+        self.peak_to_peak = np.max(self._samples) - np.min(self._samples)
+
     @staticmethod
     def _conditional_import_compute_coef():
         """
@@ -120,7 +137,8 @@ class HarmonicAnalisys(object):
         try:
             from numba import jit
             print("Using compiled Numba functions.")
-            return jit(HarmonicAnalisys._compute_coef_goertzel)
+            return jit(HarmonicAnalisys._compute_coef_goertzel,
+                       nopython=True, nogil=True)
         except ImportError:
             print("Numba not found, using numpy functions.")
             return HarmonicAnalisys._compute_coef_simple
@@ -143,7 +161,7 @@ class HarmonicAnalisys(object):
         return fft
 
 # Set up conditional functions on load ##############################################
-HarmonicAnalisys._compute_coef = HarmonicAnalisys._conditional_import_compute_coef()
+HarmonicAnalisys._compute_coef = staticmethod(HarmonicAnalisys._conditional_import_compute_coef())
 HarmonicAnalisys._fft = HarmonicAnalisys._conditional_import_fft()
 #####################################################################################
 
