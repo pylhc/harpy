@@ -1,7 +1,6 @@
 import numpy as np
 
 PI2I = 2 * np.pi * complex(0, 1)
-CZERO = complex(0, 0)
 
 ZERO_PAD_DEF = True
 HANN_DEF = False
@@ -63,12 +62,13 @@ class HarmonicAnalisys(object):
         length = len(self._samples)
         # TODO Think proper pad size
         pad_length = (1 << (length - 1).bit_length()) - length
-        pad_length = 6600 - length
+        # pad_length = 6600 - length
         self._samples = np.pad(
             self._samples,
             (0, pad_length),
             'constant'
         )
+        # self._samples = self._samples[:6000]
 
     def _jacobsen(self, dft_values):
         """

@@ -44,7 +44,7 @@ DEF_TUNE_TOLERANCE = 0.001
 NUM_HARMS = 300
 
 PROCESSES = multiprocessing.cpu_count()
-DEBUG = True
+DEBUG = False
 
 
 class Drive():
@@ -76,6 +76,11 @@ class Drive():
         self._analyze_tbt_data()
 
     def _compute_resonances_freqs(self):
+        """
+        Computes the frequencies for all the resonances listed in the
+        constante RESONANCE_LISTS, together with the natural tunes
+        frequencies if given.
+        """
         tune_x, tune_y, tune_z = self._tunes
         self._resonances_freqs = {}
         for plane in ("X", "Y"):
@@ -170,7 +175,10 @@ class Drive():
             lin_outfile = self._lin_outfiles[plane]
             tune, rms_tune = self._compute_tune_stats(plane)
             for bpm_processor in self._bpm_processors:
-                bpm_results = bpm_processor.bpm_results
+                try:
+                    bpm_results = bpm_processor.bpm_results
+                except AttributeError:
+                    continue
                 if bpm_results.plane == plane:
                     bpm_results.phase_from_avg = self._compute_phase_from_avg(
                         tune,
@@ -183,6 +191,7 @@ class Drive():
             plane_number = "1" if plane == "X" else "2"
             lin_outfile.add_float_descriptor("Q" + plane_number, tune)
             lin_outfile.add_float_descriptor("Q" + plane_number + "RMS", rms_tune)
+            lin_outfile.order_rows("S")
             lin_outfile.write_to_file()
 
     def _write_single_bpm_results(self, lin_outfile, bpm_results):
@@ -213,9 +222,14 @@ class Drive():
         lin_outfile.add_table_row(row)
 
     def _compute_tune_stats(self, plane):
-        tune_list = [bpm_processor.bpm_results.tune
-                     for bpm_processor in self._bpm_processors
-                     if bpm_processor.bpm_results.plane == plane]
+        tune_list = []
+        for bpm_processor in self._bpm_processors:
+            try:
+                bpm_results = bpm_processor.bpm_results
+            except AttributeError:
+                continue
+            if bpm_processor.bpm_results.plane == plane:
+                tune_list.append(bpm_results.tune)
         return np.mean(tune_list), np.std(tune_list)
 
     def _compute_phase_from_avg(self, tune, bpm_results):
