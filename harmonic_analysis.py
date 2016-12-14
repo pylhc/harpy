@@ -6,7 +6,7 @@ ZERO_PAD_DEF = True
 HANN_DEF = False
 
 
-class HarmonicAnalisys(object):
+class HarmonicAnalysis(object):
 
     def __init__(self, samples, zero_pad=ZERO_PAD_DEF, hann=HANN_DEF):
         self._samples = samples
@@ -26,9 +26,9 @@ class HarmonicAnalisys(object):
         frequencies = []
         for _ in range(num_harmonics):
             # Compute this harmonic frequency and coefficient.
-            dft_data = HarmonicAnalisys._fft(samples)
+            dft_data = HarmonicAnalysis._fft(samples)
             frequency = self._jacobsen(dft_data)
-            coefficient = HarmonicAnalisys._compute_coef(
+            coefficient = HarmonicAnalysis._compute_coef(
                 samples,
                 frequency * n
             ) / n
@@ -137,11 +137,11 @@ class HarmonicAnalisys(object):
         try:
             from numba import jit
             print("Using compiled Numba functions.")
-            return jit(HarmonicAnalisys._compute_coef_goertzel,
+            return jit(HarmonicAnalysis._compute_coef_goertzel,
                        nopython=True, nogil=True)
         except ImportError:
             print("Numba not found, using numpy functions.")
-            return HarmonicAnalisys._compute_coef_simple
+            return HarmonicAnalysis._compute_coef_simple
 
     @staticmethod
     def _conditional_import_fft():
@@ -161,8 +161,8 @@ class HarmonicAnalisys(object):
         return fft
 
 # Set up conditional functions on load ##############################################
-HarmonicAnalisys._compute_coef = staticmethod(HarmonicAnalisys._conditional_import_compute_coef())
-HarmonicAnalisys._fft = HarmonicAnalisys._conditional_import_fft()
+HarmonicAnalysis._compute_coef = staticmethod(HarmonicAnalysis._conditional_import_compute_coef())
+HarmonicAnalysis._fft = HarmonicAnalysis._conditional_import_fft()
 #####################################################################################
 
 
@@ -185,7 +185,7 @@ class HarmonicPlotter(object):
         self._show_and_reset()
 
     def plot_fft(self):
-        fft_func = HarmonicAnalisys._fft
+        fft_func = HarmonicAnalysis._fft
         signal = self._harmonic_analisys.get_signal()
         fft = fft_func(signal)
         self._plt.plot(range(len(fft)), np.abs(fft))
