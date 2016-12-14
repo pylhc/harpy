@@ -3,7 +3,7 @@ import sys
 import os
 import multiprocessing
 import numpy as np
-from harmonic_analysis import HarmonicAnalisys
+from harmonic_analysis import HarmonicAnalysis
 
 
 if "win" not in sys.platform:
@@ -271,7 +271,7 @@ class _BpmProcessor(object):
         self._position = bpm_data.pop(0)
         self._main_resonance = MAIN_LINES[self._plane]
         self._resonances_freqs = resonances_freqs[self._plane]
-        self._harmonic_analysis = HarmonicAnalisys(
+        self._harmonic_analysis = HarmonicAnalysis(
             self._compute_bpm_samples(bpm_data)
         )
 
