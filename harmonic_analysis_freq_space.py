@@ -51,11 +51,13 @@ class HarmonicAnalysisFreqSpc(harmonic_analysis.HarmonicAnalysis):
                 self._freq_range,
                 n
             )
-            dft_data = dft_data - new_signal_dft
+            dft_data -= new_signal_dft
 
-        coefficients, frequencies = zip(*sorted(zip(coefficients, frequencies),
-                                                key=lambda tuple: np.abs(tuple[0]),
-                                                reverse=True))
+        coefficients, frequencies = zip(
+            *sorted(zip(coefficients, frequencies),
+                    key=lambda tuple: np.abs(tuple[0]),
+                    reverse=True)
+        )
         return frequencies, coefficients
 
     def get_signal(self):
@@ -111,8 +113,10 @@ class HarmonicAnalysisFreqSpc(harmonic_analysis.HarmonicAnalysis):
         """
         signal_dft = result
         for i in range(n):
-            signal_dft[i] = coefficient * ((np.exp(PI2I * n * (fp - fk[i])) - 1) /
-                                           (np.exp(PI2I * (fp - fk[i])) - 1))
+            signal_dft[i] = coefficient * (
+                (np.exp(PI2I * n * (fp - fk[i])) - 1) /
+                (np.exp(PI2I * (fp - fk[i])) - 1)
+            )
 
     @staticmethod
     def _sum_formula_jit_wrapper(coefficient, fp, fk, n):
@@ -121,7 +125,9 @@ class HarmonicAnalysisFreqSpc(harmonic_analysis.HarmonicAnalysis):
         This wrapper makes the transformation transparent to laskar_method.
         """
         result = np.zeros(n, dtype=np.complex128)
-        HarmonicAnalysisFreqSpc._sum_formula_jit(coefficient, fp, fk, n, result)
+        HarmonicAnalysisFreqSpc._sum_formula_jit(
+            coefficient, fp, fk, n, result
+        )
         return result
 
     @staticmethod
@@ -145,7 +151,6 @@ class HarmonicAnalysisFreqSpc(harmonic_analysis.HarmonicAnalysis):
                 nopython=True,
                 nogil=True
             )
-
             return HarmonicAnalysisFreqSpc._sum_formula_jit_wrapper
         except ImportError:
             print("Numba not found, using numpy sum formula.")
@@ -168,8 +173,9 @@ class HarmonicAnalysisFreqSpc(harmonic_analysis.HarmonicAnalysis):
             print("Scipy not found, using numpy FFT.")
         return fft
 
+
 # Set up conditional functions on load ##############################################
-HarmonicAnalysisFreqSpc._compute_coef = staticmethod(HarmonicAnalysisFreqSpc._conditional_import_compute_coef())
-HarmonicAnalysisFreqSpc._sum_formula = staticmethod(HarmonicAnalysisFreqSpc._conditional_import_sum_formula())
+HarmonicAnalysisFreqSpc._compute_coef = HarmonicAnalysisFreqSpc._conditional_import_compute_coef()
+HarmonicAnalysisFreqSpc._sum_formula = HarmonicAnalysisFreqSpc._conditional_import_sum_formula()
 HarmonicAnalysisFreqSpc._fft = HarmonicAnalysisFreqSpc._conditional_import_fft()
 #####################################################################################
