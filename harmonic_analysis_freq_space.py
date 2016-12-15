@@ -2,20 +2,18 @@ import numpy as np
 import harmonic_analysis
 
 PI2I = 2 * np.pi * complex(0, 1)
+CZERO = complex(0, 0)
 
-ZERO_PAD_DEF = True
 HANN_DEF = False
 
 
 class HarmonicAnalysisFreqSpc(harmonic_analysis.HarmonicAnalysis):
 
-    def __init__(self, samples, zero_pad=ZERO_PAD_DEF, hann=HANN_DEF):
+    def __init__(self, samples, zero_pad=False, hann=HANN_DEF):
         self._samples = samples
         self._compute_orbit()
-        if zero_pad:
-            self._pad_signal()
         self._length = len(self._samples)
-        self._int_range = np.arange(self._length)
+        self._freq_range = np.arange(self._length) / self._length
         self._hann_window = None
         if hann:
             self._hann_window = np.hanning(self._length)
@@ -24,7 +22,7 @@ class HarmonicAnalysisFreqSpc(harmonic_analysis.HarmonicAnalysis):
         n = self._length
         coefficients = []
         frequencies = []
-        dft_data = HarmonicAnalysisFreqSpc._fft(samples)
+        dft_data = HarmonicAnalysisFreqSpc._fft(self._samples)
         for i in range(num_harmonics):
             # Compute this harmonic frequency and coefficient.
             frequency = self._jacobsen(dft_data)
@@ -32,15 +30,15 @@ class HarmonicAnalysisFreqSpc(harmonic_analysis.HarmonicAnalysis):
 
             # If the frequency found is in one of the bins just
             # remove it form the signal.
-            if frequency in self._int_range:
-                index = np.where(uniform_freqs == frequency)[0][0]
+            if frequency in self._freq_range:
+                index = np.where(self._freq_range == frequency)[0][0]
                 coefficients.append(dft_data[index] / n)
                 dft_data[index] = CZERO
                 continue
 
             coefficient = HarmonicAnalysisFreqSpc._compute_coef(
                     dft_data,
-                    uniform_freqs,
+                    self._freq_range,
                     frequency,
                     n
             )
@@ -50,7 +48,7 @@ class HarmonicAnalysisFreqSpc(harmonic_analysis.HarmonicAnalysis):
             new_signal_dft = HarmonicAnalysisFreqSpc._sum_formula(
                 coefficient,
                 frequency,
-                uniform_freqs,
+                self._freq_range,
                 n
             )
             dft_data = dft_data - new_signal_dft
@@ -123,7 +121,7 @@ class HarmonicAnalysisFreqSpc(harmonic_analysis.HarmonicAnalysis):
         This wrapper makes the transformation transparent to laskar_method.
         """
         result = np.zeros(n, dtype=np.complex128)
-        _sum_formula_jit(coefficient, fp, fk, n, result)
+        HarmonicAnalysisFreqSpc._sum_formula_jit(coefficient, fp, fk, n, result)
         return result
 
     @staticmethod
