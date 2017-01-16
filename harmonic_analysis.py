@@ -53,7 +53,7 @@ class HarmonicAnalysis(object):
             return self._samples
 
     def get_coefficient_for_freq(self, freq):
-        return self._compute_coef(self._samples, freq)
+        return self._compute_coef(self._samples, freq * self._length) / self._length
 
     def _pad_signal(self):
         """

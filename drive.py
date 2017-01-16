@@ -19,10 +19,10 @@ PI2I = 2 * np.pi * complex(0, 1)
 
 HEADERS = {"X": ["NAME", "S", "BINDEX", "SLABEL", "TUNEX",
                  "NOISE", "PK2PK", "CO", "CORMS", "AMPX",
-                 "MUX", "AVG_MUX"],
+                 "MUX", "AVG_AMPX", "AVG_MUX"],
            "Y": ["NAME", "S", "BINDEX", "SLABEL", "TUNEY",
                  "NOISE", "PK2PK", "CO", "CORMS",
-                 "AMPY", "MUY", "AVG_MUY"]}
+                 "AMPY", "MUY", "AVG_AMPY", "AVG_MUY"]}
 
 SPECTR_COLUMN_NAMES = ["FREQ", "AMP"]
 
@@ -180,7 +180,8 @@ class Drive():
                 except AttributeError:
                     continue
                 if bpm_results.plane == plane:
-                    bpm_results.phase_from_avg = self._compute_phase_from_avg(
+                    (bpm_results.amp_from_avg,
+                     bpm_results.phase_from_avg) = self._compute_from_avg(
                         tune,
                         bpm_processor
                     )
@@ -198,7 +199,7 @@ class Drive():
         row = [bpm_results.name, bpm_results.position, 0, 0, bpm_results.tune,
                0, bpm_results.peak_to_peak, bpm_results.closed_orbit,
                bpm_results.closed_orbit_rms, bpm_results.amplitude, bpm_results.phase,
-               bpm_results.phase_from_avg]
+               bpm_results.amp_from_avg, bpm_results.phase_from_avg]
         resonance_list = RESONANCE_LISTS[bpm_results.plane]
         main_resonance = MAIN_LINES[bpm_results.plane]
         for resonance in resonance_list:
@@ -232,9 +233,9 @@ class Drive():
                 tune_list.append(bpm_results.tune)
         return np.mean(tune_list), np.std(tune_list)
 
-    def _compute_phase_from_avg(self, tune, bpm_results):
+    def _compute_from_avg(self, tune, bpm_results):
         coef = bpm_results.get_coefficient_for_freq(tune)
-        return np.angle(coef) / (2 * np.pi)
+        return np.abs(coef), np.angle(coef) / (2 * np.pi)
 
 
 # Global space ################################################
