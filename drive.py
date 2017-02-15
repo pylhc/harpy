@@ -47,25 +47,14 @@ PROCESSES = multiprocessing.cpu_count()
 DEBUG = False
 
 
-class Drive():
-
+class DriveAbstract(object):
     def __init__(self,
-                 input_file,
                  tunes,
                  nattunes=None,
                  tolerance=DEF_TUNE_TOLERANCE,
                  start_turn=0,
                  end_turn=None,
-                 output_dir=None,
                  sequential=False):
-        self._input_file = input_file
-        if output_dir is None:
-            self._output_dir = os.path.dirname(input_file)
-        else:
-            self._output_dir = output_dir
-        self._spectr_outdir = os.path.join(
-            self._output_dir, "BPM"
-        )
         self._tunes = tunes
         self._nattunes = nattunes
         self._tolerance = tolerance
@@ -73,7 +62,14 @@ class Drive():
         self._end_turn = end_turn
         self._sequential = sequential
         self._compute_resonances_freqs()
-        self._analyze_tbt_data()
+
+    # Methods to override in subclasses:
+    def _do_analysis(self):
+        raise NotImplementedError("Dont instantiate this abstract class!")
+
+    def _get_outfile_name(self, plane):
+        raise NotImplementedError("Dont instantiate this abstract class!")
+    ######
 
     def _compute_resonances_freqs(self):
         """
@@ -102,20 +98,17 @@ class Drive():
             if nattune_y is not None:
                 self._resonances_freqs["Y"]["NATY"] = nattune_y
 
-    def _analyze_tbt_data(self):
-        (lin_outfile_x,
-         lin_outfile_y) = self._create_lin_files()
-        self._lin_outfiles = {"X": lin_outfile_x,
-                              "Y": lin_outfile_y}
+    def start_analysis(self):
         self._bpm_processors = []
+        self._create_lin_files()
         iotools.create_dirs(self._spectr_outdir)
-        self._read_input_file()
+        self._do_analysis()
         self._write_full_results()
 
     def _create_lin_files(self):
-        lin_outfiles = []
+        self._lin_outfiles = {}
         for plane in "X", "Y":
-            file_name = os.path.basename(self._input_file) + "_lin" + plane.lower()
+            file_name = self._get_outfile_name(plane)
             lin_outfile = tfs_file_writer.TfsFileWriter(
                 os.path.join(self._output_dir, file_name)
             )
@@ -132,43 +125,15 @@ class Drive():
             headers.extend(["NATTUNE" + plane,
                             "NATAMP" + plane])
             lin_outfile.add_column_names(headers)
-            lin_outfile.add_column_datatypes(["%s"] + ["%le"] * (len(headers) - 1))
-            lin_outfiles.append(lin_outfile)
-        return lin_outfiles
-
-    def _read_input_file(self):
-        lines = []
-        with open(self._input_file, "r") as records:
-            for line in records:
-                bpm_data = line.split()
-                if bpm_data[0] in ("0", "1"):
-                    lines.append(line.split())
-                else:
-                    continue
-        pool = multiprocessing.Pool(PROCESSES)
-        num_of_chunks = int(len(lines) / PROCESSES) + 1
-        for bpm_datas in Drive.chunks(lines, num_of_chunks):
-            self._launch_bpm_chunk_analysis(bpm_datas, pool)
-        pool.close()
-        pool.join()
+            lin_outfile.add_column_datatypes(
+                ["%s"] + ["%le"] * (len(headers) - 1))
+            self._lin_outfiles[plane] = lin_outfile
 
     @staticmethod
     def chunks(l, n):
         """Yield successive n-sized chunks from l."""
         for i in xrange(0, len(l), n):  # noqa xrange doesn't exist in Python3
             yield l[i:i + n]
-
-    def _launch_bpm_chunk_analysis(self, bpm_datas, pool):
-        args = (self._start_turn, self._end_turn, self._tolerance,
-                self._resonances_freqs, self._spectr_outdir, bpm_datas)
-        if self._sequential:
-            self._bpm_processors.extend(_analyze_bpm_chunk(*args))
-        else:
-            pool.apply_async(
-                _analyze_bpm_chunk,
-                args,
-                callback=self._bpm_processors.extend
-            )
 
     def _write_full_results(self):
         for plane in ("X", "Y"):
@@ -191,15 +156,17 @@ class Drive():
                     )
             plane_number = "1" if plane == "X" else "2"
             lin_outfile.add_float_descriptor("Q" + plane_number, tune)
-            lin_outfile.add_float_descriptor("Q" + plane_number + "RMS", rms_tune)
+            lin_outfile.add_float_descriptor("Q" + plane_number + "RMS",
+                                             rms_tune)
             lin_outfile.order_rows("S")
             lin_outfile.write_to_file()
 
     def _write_single_bpm_results(self, lin_outfile, bpm_results):
         row = [bpm_results.name, bpm_results.position, 0, 0, bpm_results.tune,
                0, bpm_results.peak_to_peak, bpm_results.closed_orbit,
-               bpm_results.closed_orbit_rms, bpm_results.amplitude, bpm_results.phase,
-               bpm_results.amp_from_avg, bpm_results.phase_from_avg]
+               bpm_results.closed_orbit_rms, bpm_results.amplitude,
+               bpm_results.phase, bpm_results.amp_from_avg,
+               bpm_results.phase_from_avg]
         resonance_list = RESONANCE_LISTS[bpm_results.plane]
         main_resonance = MAIN_LINES[bpm_results.plane]
         for resonance in resonance_list:
@@ -238,6 +205,66 @@ class Drive():
         return np.abs(coef), np.angle(coef) / (2 * np.pi)
 
 
+class DriveFile(DriveAbstract):
+
+    def __init__(self,
+                 input_file,
+                 tunes,
+                 nattunes=None,
+                 tolerance=DEF_TUNE_TOLERANCE,
+                 start_turn=0,
+                 end_turn=None,
+                 output_dir=None,
+                 sequential=False):
+        super(DriveFile, self).__init__(
+            tunes,
+            nattunes=None,
+            tolerance=DEF_TUNE_TOLERANCE,
+            start_turn=0,
+            end_turn=None,
+            sequential=False
+        )
+        self._input_file = input_file
+        if output_dir is None:
+            self._output_dir = os.path.dirname(input_file)
+        else:
+            self._output_dir = output_dir
+        self._spectr_outdir = os.path.join(
+            self._output_dir, "BPM"
+        )
+
+    def _get_outfile_name(self, plane):
+        return os.path.basename(self._input_file) + "_lin" + plane.lower()
+
+    def _do_analysis(self):
+        lines = []
+        with open(self._input_file, "r") as records:
+            for line in records:
+                bpm_data = line.split()
+                if bpm_data[0] in ("0", "1"):
+                    lines.append(line.split())
+                else:
+                    continue
+        pool = multiprocessing.Pool(PROCESSES)
+        num_of_chunks = int(len(lines) / PROCESSES) + 1
+        for bpm_datas in DriveAbstract.chunks(lines, num_of_chunks):
+            self._launch_bpm_chunk_analysis(bpm_datas, pool)
+        pool.close()
+        pool.join()
+
+    def _launch_bpm_chunk_analysis(self, bpm_datas, pool):
+        args = (self._start_turn, self._end_turn, self._tolerance,
+                self._resonances_freqs, self._spectr_outdir, bpm_datas)
+        if self._sequential:
+            self._bpm_processors.extend(_analyze_bpm_chunk(*args))
+        else:
+            pool.apply_async(
+                _analyze_bpm_chunk,
+                args,
+                callback=self._bpm_processors.extend
+            )
+
+
 # Global space ################################################
 def _analyze_bpm_chunk(start_turn, end_turn, tolerance,
                        resonances_freqs, spectr_outdir, bpm_datas):
@@ -250,9 +277,16 @@ def _analyze_bpm_chunk(start_turn, end_turn, tolerance,
     if DEBUG:
         print("Staring process with chunksize", len(bpm_datas))
     for bpm_data in bpm_datas:
+        plane = N_TO_P[bpm_data.pop(0)]
+        name = bpm_data.pop(0)
+        position = bpm_data.pop(0)
+        samples = _BpmProcessor._compute_bpm_samples(
+            bpm_data, start_turn, end_turn
+        )
         bpm_processor = _BpmProcessor(
             start_turn, end_turn, tolerance,
-            resonances_freqs, spectr_outdir, bpm_data
+            resonances_freqs, spectr_outdir,
+            plane, position, name, samples
         )
         bpm_processor.do_bpm_analysis()
         results.append(bpm_processor)
@@ -260,21 +294,103 @@ def _analyze_bpm_chunk(start_turn, end_turn, tolerance,
 ###############################################################
 
 
+class DriveMatrix(DriveAbstract):
+    def __init__(self,
+                 bpm_names,
+                 bpm_matrix_x,
+                 bpm_matrix_y,
+                 tunes,
+                 output_dir,
+                 model_path,
+                 nattunes=None,
+                 tolerance=DEF_TUNE_TOLERANCE,
+                 start_turn=0,
+                 end_turn=None,
+                 sequential=False):
+        super(DriveFile, self).__init__(
+            tunes,
+            nattunes=None,
+            tolerance=DEF_TUNE_TOLERANCE,
+            start_turn=0,
+            end_turn=None,
+            sequential=False
+        )
+        self._bpm_names = bpm_names
+        self._bpm_matrices = {"X": bpm_matrix_x,
+                              "Y": bpm_matrix_y}
+        self._model_path = model_path
+        self._spectr_outdir = os.path.join(
+            self._output_dir, "BPM"
+        )
+
+    def _get_outfile_name(self, plane):
+        return "harmonics_" + plane.lower() + ".dat"
+
+    def _do_analysis(self):
+        model = metaclass.twiss(self._model_path)
+        pool = multiprocessing.Pool(PROCESSES)
+        for bpm_index in range(len(self._bpm_names)):
+            for plane in ("X", "Y"):
+                bpm_name = self._bpm_names[bpm_index]
+                bpm_row = self._bpm_matrix[bpm_index]
+                bpm_position = model.S[model.indx[bpm_name]]
+                self._launch_bpm_row_analysis(plane, bpm_position, bpm_name,
+                                              bpm_row, pool)
+        pool.close()
+        pool.join()
+
+    def _launch_bpm_row_analysis(self, plane, bpm_position,
+                                 bpm_name, bpm_row, pool):
+        args = (plane, bpm_name, bpm_row, bpm_position,
+                self._start_turn, self._end_turn, self._tolerance,
+                self._resonances_freqs, self._spectr_outdir)
+        if self._sequential:
+            self._bpm_processors.extend(_analyze_bpm_samples(*args))
+        else:
+            pool.apply_async(
+                _analyze_bpm_samples,
+                args,
+                callback=self._bpm_processors.extend
+            )
+
+
+# Global space ################################################
+def _analyze_bpm_samples(bpm_plane, bpm_name, bpm_samples, bpm_position,
+                         start_turn, end_turn, tolerance,
+                         resonances_freqs, spectr_outdir):
+    """
+    This function triggers the per BPM data processing.
+    It has to be outside of the classes to make it pickable for
+    the multiprocessing module.
+    """
+    results = []
+    if DEBUG:
+        print("Staring process for ", bpm_name)
+    bpm_processor = _BpmProcessor(
+        start_turn, end_turn, tolerance,
+        resonances_freqs, spectr_outdir,
+        bpm_plane, bpm_position, bpm_name, bpm_samples
+    )
+    bpm_processor.do_bpm_analysis()
+    results.append(bpm_processor)
+    return results
+###############################################################
+
+
 class _BpmProcessor(object):
     def __init__(self, start_turn, end_turn, tolerance,
-                 resonances_freqs, spectr_outdir, bpm_data):
+                 resonances_freqs, spectr_outdir,
+                 plane, position, name, samples):
         self._start_turn = start_turn
         self._end_turn = end_turn
         self._tolerance = tolerance
         self._spectr_outdir = spectr_outdir
-        self._plane = N_TO_P[bpm_data.pop(0)]
-        self._name = bpm_data.pop(0)
-        self._position = bpm_data.pop(0)
+        self._plane = plane
+        self._name = name
+        self._position = position
         self._main_resonance = MAIN_LINES[self._plane]
         self._resonances_freqs = resonances_freqs[self._plane]
-        self._harmonic_analysis = HarmonicAnalysis(
-            self._compute_bpm_samples(bpm_data)
-        )
+        self._harmonic_analysis = HarmonicAnalysis(samples)
 
     def do_bpm_analysis(self):
         frequencies, coefficients = self._harmonic_analysis.laskar_method(
@@ -314,14 +430,15 @@ class _BpmProcessor(object):
         bpm_results.closed_orbit_rms = self._harmonic_analysis.closed_orbit_rms
         self.bpm_results = bpm_results
 
-    def _compute_bpm_samples(self, bpm_data):
-        data_length = len(bpm_data)
-        if (self._end_turn is not None and self._end_turn < data_length):
-            end_index = self._end_turn
+    @staticmethod
+    def _compute_bpm_samples(bpm_samples_str, start_turn, end_turn):
+        data_length = len(bpm_samples_str)
+        if (end_turn is not None and end_turn < data_length):
+            end_index = end_turn
         else:
             end_index = data_length
         return np.array(
-            [float(sample) for sample in bpm_data[self._start_turn:end_index]]
+            [float(sample) for sample in bpm_samples_str[start_turn:end_index]]
         )
 
     def _write_bpm_spectrum(self, bpm_name, bpm_plane, amplitudes, freqs):

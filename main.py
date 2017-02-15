@@ -1,5 +1,6 @@
 import optparse
-from drive import Drive
+import drive
+from drive import DriveFile, DriveMatrix
 
 
 def _parse_args():
@@ -81,8 +82,30 @@ def _init_from_args():
     start_turn = options.start_turn
     end_turn = options.end_turn
     sequential = options.sequential
-    return Drive(input_file, tunes, nattunes, tolerance,
-                 start_turn, end_turn, output_dir, sequential)
+    init_from_file(input_file, tunes, nattunes, tolerance,
+                   start_turn, end_turn, output_dir, sequential)
+
+
+def init_from_file(input_file, tunes, nattunes=None,
+                   tolerance=drive.DEF_TUNE_TOLERANCE,
+                   start_turn=0, end_turn=None,
+                   output_dir=None, sequential=False):
+    drive_file = DriveFile(input_file, tunes, nattunes=None,
+                           tolerance=drive.DEF_TUNE_TOLERANCE,
+                           start_turn=0, end_turn=None,
+                           output_dir=None, sequential=False)
+    drive_file.start_analysis()
+
+
+def init_from_matrix(bpm_names, bpm_matrix_x, bpm_matrix_y,
+                     tunes, output_dir, model_path, nattunes=None,
+                     tolerance=drive.DEF_TUNE_TOLERANCE,
+                     start_turn=0, end_turn=None, sequential=False):
+    drive_matrix = DriveMatrix(bpm_names, bpm_matrix_x, bpm_matrix_y,
+                               tunes, output_dir, model_path, nattunes=None,
+                               tolerance=drive.DEF_TUNE_TOLERANCE,
+                               start_turn=0, end_turn=None, sequential=False)
+    drive_matrix.start_analysis()
 
 
 if __name__ == "__main__":
