@@ -142,16 +142,15 @@ class DriveAbstract(object):
                 bpm_results = bpm_processor.bpm_results
             except AttributeError:
                 continue
-            if bpm_results.plane == self._plane:
-                (bpm_results.amp_from_avg,
-                 bpm_results.phase_from_avg) = self._compute_from_avg(
-                    tune,
-                    bpm_processor
-                )
-                self._write_single_bpm_results(
-                    lin_outfile,
-                    bpm_results
-                )
+            (bpm_results.amp_from_avg,
+             bpm_results.phase_from_avg) = self._compute_from_avg(
+                tune,
+                bpm_processor
+            )
+            self._write_single_bpm_results(
+                lin_outfile,
+                bpm_results
+            )
         plane_number = "1" if self._plane == "X" else "2"
         lin_outfile.add_float_descriptor("Q" + plane_number, tune)
         lin_outfile.add_float_descriptor("Q" + plane_number + "RMS",
@@ -165,8 +164,8 @@ class DriveAbstract(object):
                bpm_results.closed_orbit_rms, bpm_results.amplitude,
                bpm_results.phase, bpm_results.amp_from_avg,
                bpm_results.phase_from_avg]
-        resonance_list = RESONANCE_LISTS[bpm_results.plane]
-        main_resonance = MAIN_LINES[bpm_results.plane]
+        resonance_list = RESONANCE_LISTS[self._plane]
+        main_resonance = MAIN_LINES[self._plane]
         for resonance in resonance_list:
             if resonance != main_resonance:
                 if resonance in bpm_results.resonances:
@@ -177,7 +176,7 @@ class DriveAbstract(object):
                     row.append(0.0)
                     row.append(0.0)
 
-        col_name = "NAT" + bpm_results.plane.upper()
+        col_name = "NAT" + self._plane.upper()
         try:
             natural_coef = bpm_results.resonances[col_name]
             row.append(np.abs(natural_coef) / bpm_results.amplitude)
@@ -194,8 +193,7 @@ class DriveAbstract(object):
                 bpm_results = bpm_processor.bpm_results
             except AttributeError:
                 continue
-            if bpm_processor.bpm_results.plane == self._plane:
-                tune_list.append(bpm_results.tune)
+            tune_list.append(bpm_results.tune)
         return np.mean(tune_list), np.std(tune_list)
 
     def _compute_from_avg(self, tune, bpm_results):
@@ -483,7 +481,6 @@ class _BpmResults(object):
     def __init__(self, bpm_processor):
         self.name = bpm_processor._name
         self.position = bpm_processor._position
-        self.plane = bpm_processor._plane
         self.tune = None
         self.phase = None
         self.avphase = None
