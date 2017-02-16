@@ -50,12 +50,14 @@ DEBUG = False
 class DriveAbstract(object):
     def __init__(self,
                  tunes,
+                 plane,
                  nattunes=None,
                  tolerance=DEF_TUNE_TOLERANCE,
                  start_turn=0,
                  end_turn=None,
                  sequential=False):
         self._tunes = tunes
+        self._plane = plane
         self._nattunes = nattunes
         self._tolerance = tolerance
         self._start_turn = start_turn
@@ -67,7 +69,7 @@ class DriveAbstract(object):
     def _do_analysis(self):
         raise NotImplementedError("Dont instantiate this abstract class!")
 
-    def _get_outfile_name(self, plane):
+    def _get_outfile_name(self):
         raise NotImplementedError("Dont instantiate this abstract class!")
     ######
 
@@ -79,18 +81,17 @@ class DriveAbstract(object):
         """
         tune_x, tune_y, tune_z = self._tunes
         self._resonances_freqs = {}
-        for plane in ("X", "Y"):
-            freqs = [(resonance_h * tune_x) +
-                     (resonance_v * tune_y) +
-                     (resonance_l * tune_z)
-                     for (resonance_h,
-                          resonance_v,
-                          resonance_l) in RESONANCE_LISTS[plane]]
-            # Move to [0, 1] domain.
-            freqs = [freq + 1. if freq < 0. else freq for freq in freqs]
-            self._resonances_freqs[plane] = dict(
-                zip(RESONANCE_LISTS[plane], freqs)
-            )
+        freqs = [(resonance_h * tune_x) +
+                 (resonance_v * tune_y) +
+                 (resonance_l * tune_z)
+                 for (resonance_h,
+                      resonance_v,
+                      resonance_l) in RESONANCE_LISTS[self._plane]]
+        # Move to [0, 1] domain.
+        freqs = [freq + 1. if freq < 0. else freq for freq in freqs]
+        self._resonances_freqs[self._plane] = dict(
+            zip(RESONANCE_LISTS[self._plane], freqs)
+        )
         if self._nattunes is not None:
             nattune_x, nattune_y, _ = self._nattunes  # TODO: nattunez?
             if nattune_x is not None:
@@ -106,28 +107,26 @@ class DriveAbstract(object):
         self._write_full_results()
 
     def _create_lin_files(self):
-        self._lin_outfiles = {}
-        for plane in "X", "Y":
-            file_name = self._get_outfile_name(plane)
-            lin_outfile = tfs_file_writer.TfsFileWriter(
-                os.path.join(self._output_dir, file_name)
-            )
-            headers = HEADERS[plane]
-            for resonance in RESONANCE_LISTS[plane]:
-                if resonance == MAIN_LINES[plane]:
-                    continue
-                x, y, z = resonance
-                if z == 0:
-                    resstr = (str(x) + str(y)).replace("-", "_")
-                else:
-                    resstr = (str(x) + str(y) + str(z)).replace("-", "_")
-                headers.extend(["AMP" + resstr, "PHASE" + resstr])
-            headers.extend(["NATTUNE" + plane,
-                            "NATAMP" + plane])
-            lin_outfile.add_column_names(headers)
-            lin_outfile.add_column_datatypes(
-                ["%s"] + ["%le"] * (len(headers) - 1))
-            self._lin_outfiles[plane] = lin_outfile
+        file_name = self._get_outfile_name(self._plane)
+        lin_outfile = tfs_file_writer.TfsFileWriter(
+            os.path.join(self._output_dir, file_name)
+        )
+        headers = HEADERS[self._plane]
+        for resonance in RESONANCE_LISTS[self._plane]:
+            if resonance == MAIN_LINES[self._plane]:
+                continue
+            x, y, z = resonance
+            if z == 0:
+                resstr = (str(x) + str(y)).replace("-", "_")
+            else:
+                resstr = (str(x) + str(y) + str(z)).replace("-", "_")
+            headers.extend(["AMP" + resstr, "PHASE" + resstr])
+        headers.extend(["NATTUNE" + self._plane,
+                        "NATAMP" + self._plane])
+        lin_outfile.add_column_names(headers)
+        lin_outfile.add_column_datatypes(
+            ["%s"] + ["%le"] * (len(headers) - 1))
+        self._lin_outfile = lin_outfile
 
     @staticmethod
     def chunks(l, n):
@@ -136,30 +135,29 @@ class DriveAbstract(object):
             yield l[i:i + n]
 
     def _write_full_results(self):
-        for plane in ("X", "Y"):
-            lin_outfile = self._lin_outfiles[plane]
-            tune, rms_tune = self._compute_tune_stats(plane)
-            for bpm_processor in self._bpm_processors:
-                try:
-                    bpm_results = bpm_processor.bpm_results
-                except AttributeError:
-                    continue
-                if bpm_results.plane == plane:
-                    (bpm_results.amp_from_avg,
-                     bpm_results.phase_from_avg) = self._compute_from_avg(
-                        tune,
-                        bpm_processor
-                    )
-                    self._write_single_bpm_results(
-                        lin_outfile,
-                        bpm_results
-                    )
-            plane_number = "1" if plane == "X" else "2"
-            lin_outfile.add_float_descriptor("Q" + plane_number, tune)
-            lin_outfile.add_float_descriptor("Q" + plane_number + "RMS",
-                                             rms_tune)
-            lin_outfile.order_rows("S")
-            lin_outfile.write_to_file()
+        lin_outfile = self._lin_outfile
+        tune, rms_tune = self._compute_tune_stats()
+        for bpm_processor in self._bpm_processors:
+            try:
+                bpm_results = bpm_processor.bpm_results
+            except AttributeError:
+                continue
+            if bpm_results.plane == self._plane:
+                (bpm_results.amp_from_avg,
+                 bpm_results.phase_from_avg) = self._compute_from_avg(
+                    tune,
+                    bpm_processor
+                )
+                self._write_single_bpm_results(
+                    lin_outfile,
+                    bpm_results
+                )
+        plane_number = "1" if self._plane == "X" else "2"
+        lin_outfile.add_float_descriptor("Q" + plane_number, tune)
+        lin_outfile.add_float_descriptor("Q" + plane_number + "RMS",
+                                         rms_tune)
+        lin_outfile.order_rows("S")
+        lin_outfile.write_to_file()
 
     def _write_single_bpm_results(self, lin_outfile, bpm_results):
         row = [bpm_results.name, bpm_results.position, 0, 0, bpm_results.tune,
@@ -189,14 +187,14 @@ class DriveAbstract(object):
             row.append(0.0)
         lin_outfile.add_table_row(row)
 
-    def _compute_tune_stats(self, plane):
+    def _compute_tune_stats(self):
         tune_list = []
         for bpm_processor in self._bpm_processors:
             try:
                 bpm_results = bpm_processor.bpm_results
             except AttributeError:
                 continue
-            if bpm_processor.bpm_results.plane == plane:
+            if bpm_processor.bpm_results.plane == self._plane:
                 tune_list.append(bpm_results.tune)
         return np.mean(tune_list), np.std(tune_list)
 
@@ -210,6 +208,7 @@ class DriveFile(DriveAbstract):
     def __init__(self,
                  input_file,
                  tunes,
+                 plane,
                  nattunes=None,
                  tolerance=DEF_TUNE_TOLERANCE,
                  start_turn=0,
@@ -218,6 +217,7 @@ class DriveFile(DriveAbstract):
                  sequential=False):
         super(DriveFile, self).__init__(
             tunes,
+            plane,
             nattunes=None,
             tolerance=DEF_TUNE_TOLERANCE,
             start_turn=0,
@@ -241,8 +241,12 @@ class DriveFile(DriveAbstract):
         with open(self._input_file, "r") as records:
             for line in records:
                 bpm_data = line.split()
-                if bpm_data[0] in ("0", "1"):
-                    lines.append(line.split())
+                try:
+                    bpm_plane = N_TO_P[bpm_data.pop(0)]
+                except KeyError:
+                    continue  # Ignore comments
+                if bpm_plane == self._plane:
+                    lines.append(bpm_data)
                 else:
                     continue
         pool = multiprocessing.Pool(PROCESSES)
@@ -253,7 +257,7 @@ class DriveFile(DriveAbstract):
         pool.join()
 
     def _launch_bpm_chunk_analysis(self, bpm_datas, pool):
-        args = (self._start_turn, self._end_turn, self._tolerance,
+        args = (self._plane, self._start_turn, self._end_turn, self._tolerance,
                 self._resonances_freqs, self._spectr_outdir, bpm_datas)
         if self._sequential:
             self._bpm_processors.extend(_analyze_bpm_chunk(*args))
@@ -266,7 +270,7 @@ class DriveFile(DriveAbstract):
 
 
 # Global space ################################################
-def _analyze_bpm_chunk(start_turn, end_turn, tolerance,
+def _analyze_bpm_chunk(plane, start_turn, end_turn, tolerance,
                        resonances_freqs, spectr_outdir, bpm_datas):
     """
     This function triggers the per BPM data processing.
@@ -277,7 +281,6 @@ def _analyze_bpm_chunk(start_turn, end_turn, tolerance,
     if DEBUG:
         print("Staring process with chunksize", len(bpm_datas))
     for bpm_data in bpm_datas:
-        plane = N_TO_P[bpm_data.pop(0)]
         name = bpm_data.pop(0)
         position = bpm_data.pop(0)
         samples = _BpmProcessor._compute_bpm_samples(
@@ -297,9 +300,9 @@ def _analyze_bpm_chunk(start_turn, end_turn, tolerance,
 class DriveMatrix(DriveAbstract):
     def __init__(self,
                  bpm_names,
-                 bpm_matrix_x,
-                 bpm_matrix_y,
+                 bpm_matrix,
                  tunes,
+                 plane,
                  output_dir,
                  model_path,
                  nattunes=None,
@@ -307,8 +310,9 @@ class DriveMatrix(DriveAbstract):
                  start_turn=0,
                  end_turn=None,
                  sequential=False):
-        super(DriveFile, self).__init__(
+        super(DriveMatrix, self).__init__(
             tunes,
+            plane,
             nattunes=None,
             tolerance=DEF_TUNE_TOLERANCE,
             start_turn=0,
@@ -316,8 +320,7 @@ class DriveMatrix(DriveAbstract):
             sequential=False
         )
         self._bpm_names = bpm_names
-        self._bpm_matrices = {"X": bpm_matrix_x,
-                              "Y": bpm_matrix_y}
+        self._bpm_matrix = bpm_matrix
         self._model_path = model_path
         self._spectr_outdir = os.path.join(
             self._output_dir, "BPM"
@@ -330,18 +333,17 @@ class DriveMatrix(DriveAbstract):
         model = metaclass.twiss(self._model_path)
         pool = multiprocessing.Pool(PROCESSES)
         for bpm_index in range(len(self._bpm_names)):
-            for plane in ("X", "Y"):
-                bpm_name = self._bpm_names[bpm_index]
-                bpm_row = self._bpm_matrix[bpm_index]
-                bpm_position = model.S[model.indx[bpm_name]]
-                self._launch_bpm_row_analysis(plane, bpm_position, bpm_name,
-                                              bpm_row, pool)
+            bpm_name = self._bpm_names[bpm_index]
+            bpm_row = self._bpm_matrix[bpm_index]
+            bpm_position = model.S[model.indx[bpm_name]]
+            self._launch_bpm_row_analysis(bpm_position, bpm_name,
+                                          bpm_row, pool)
         pool.close()
         pool.join()
 
-    def _launch_bpm_row_analysis(self, plane, bpm_position,
+    def _launch_bpm_row_analysis(self, bpm_position,
                                  bpm_name, bpm_row, pool):
-        args = (plane, bpm_name, bpm_row, bpm_position,
+        args = (self._plane, bpm_name, bpm_row, bpm_position,
                 self._start_turn, self._end_turn, self._tolerance,
                 self._resonances_freqs, self._spectr_outdir)
         if self._sequential:

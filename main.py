@@ -90,19 +90,20 @@ def init_from_file(input_file, tunes, nattunes=None,
                    tolerance=drive.DEF_TUNE_TOLERANCE,
                    start_turn=0, end_turn=None,
                    output_dir=None, sequential=False):
-    drive_file = DriveFile(input_file, tunes, nattunes=None,
-                           tolerance=drive.DEF_TUNE_TOLERANCE,
-                           start_turn=0, end_turn=None,
-                           output_dir=None, sequential=False)
-    drive_file.start_analysis()
+    for plane in ("X", "Y"):
+        drive_file = DriveFile(input_file, tunes, plane, nattunes=None,
+                               tolerance=drive.DEF_TUNE_TOLERANCE,
+                               start_turn=0, end_turn=None,
+                               output_dir=None, sequential=False)
+        drive_file.start_analysis()
 
 
-def init_from_matrix(bpm_names, bpm_matrix_x, bpm_matrix_y,
-                     tunes, output_dir, model_path, nattunes=None,
+def init_from_matrix(bpm_names, bpm_matrix, tunes, plane,
+                     output_dir, model_path, nattunes=None,
                      tolerance=drive.DEF_TUNE_TOLERANCE,
                      start_turn=0, end_turn=None, sequential=False):
-    drive_matrix = DriveMatrix(bpm_names, bpm_matrix_x, bpm_matrix_y,
-                               tunes, output_dir, model_path, nattunes=None,
+    drive_matrix = DriveMatrix(bpm_names, bpm_matrix, tunes, plane,
+                               output_dir, model_path, nattunes=None,
                                tolerance=drive.DEF_TUNE_TOLERANCE,
                                start_turn=0, end_turn=None, sequential=False)
     drive_matrix.start_analysis()
