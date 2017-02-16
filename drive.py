@@ -322,6 +322,7 @@ class DriveMatrix(DriveAbstract):
         self._bpm_names = bpm_names
         self._bpm_matrix = bpm_matrix
         self._model_path = model_path
+        self._output_dir = output_dir
         self._spectr_outdir = os.path.join(
             self._output_dir, "BPM"
         )
@@ -335,7 +336,11 @@ class DriveMatrix(DriveAbstract):
         for bpm_index in range(len(self._bpm_names)):
             bpm_name = self._bpm_names[bpm_index]
             bpm_row = self._bpm_matrix[bpm_index]
-            bpm_position = model.S[model.indx[bpm_name]]
+            try:
+                bpm_position = model.S[model.indx[bpm_name]]
+            except KeyError:
+                print("Cannot find", bpm_name, "in model.")
+                continue
             self._launch_bpm_row_analysis(bpm_position, bpm_name,
                                           bpm_row, pool)
         pool.close()
