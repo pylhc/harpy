@@ -56,6 +56,7 @@ class DriveAbstract(object):
                  start_turn=0,
                  end_turn=None,
                  sequential=False):
+        # Inputs
         self._tunes = tunes
         self._plane = plane
         self._nattunes = nattunes
@@ -64,6 +65,53 @@ class DriveAbstract(object):
         self._end_turn = end_turn
         self._sequential = sequential
         self._compute_resonances_freqs()
+        # Outputs
+        self._measured_tune = None
+        self._bpm_results = []
+
+    @property
+    def measured_tune(self):
+        if self._measured_tune is None:
+            raise ValueError(
+                "Value not computed yet. Run start_analysis() first"
+            )
+        return self._measured_tune
+
+    @property
+    def bpm_results(self):
+        if len(self._bpm_results) == 0:
+            raise ValueError(
+                "Value not computed yet. Run start_analysis() first"
+            )
+        return self._bpm_results
+
+    # Public methods
+    def start_analysis(self):
+        self._bpm_processors = []
+        self._do_analysis()
+        self._gather_results()
+
+    def write_full_results(self):
+        if DEBUG:
+            print("Writting results...")
+        self._create_lin_files()
+        iotools.create_dirs(self._spectr_outdir)
+        lin_outfile = self._lin_outfile
+        for bpm_results in self.bpm_results:
+            self._write_single_bpm_results(
+                lin_outfile,
+                bpm_results
+            )
+        plane_number = "1" if self._plane == "X" else "2"
+        tune, rms_tune = self._measured_tune
+        lin_outfile.add_float_descriptor("Q" + plane_number, tune)
+        lin_outfile.add_float_descriptor("Q" + plane_number + "RMS",
+                                         rms_tune)
+        lin_outfile.order_rows("S")
+        lin_outfile.write_to_file()
+        if DEBUG:
+            print("Writting done.")
+    ######
 
     # Methods to override in subclasses:
     def _do_analysis(self):
@@ -73,6 +121,7 @@ class DriveAbstract(object):
         raise NotImplementedError("Dont instantiate this abstract class!")
     ######
 
+    # Private methods
     def _compute_resonances_freqs(self):
         """
         Computes the frequencies for all the resonances listed in the
@@ -99,13 +148,6 @@ class DriveAbstract(object):
             if nattune_y is not None:
                 self._resonances_freqs["Y"]["NATY"] = nattune_y
 
-    def start_analysis(self):
-        self._bpm_processors = []
-        self._create_lin_files()
-        iotools.create_dirs(self._spectr_outdir)
-        self._do_analysis()
-        self._write_full_results()
-
     def _create_lin_files(self):
         file_name = self._get_outfile_name(self._plane)
         lin_outfile = tfs_file_writer.TfsFileWriter(
@@ -128,15 +170,11 @@ class DriveAbstract(object):
             ["%s"] + ["%le"] * (len(headers) - 1))
         self._lin_outfile = lin_outfile
 
-    @staticmethod
-    def chunks(l, n):
-        """Yield successive n-sized chunks from l."""
-        for i in xrange(0, len(l), n):  # noqa xrange doesn't exist in Python3
-            yield l[i:i + n]
-
-    def _write_full_results(self):
-        lin_outfile = self._lin_outfile
-        tune, rms_tune = self._compute_tune_stats()
+    def _gather_results(self):
+        if DEBUG:
+            print("Gathering results...")
+        self._measured_tune = self._compute_tune_stats()
+        tune, _ = self._measured_tune
         for bpm_processor in self._bpm_processors:
             try:
                 bpm_results = bpm_processor.bpm_results
@@ -147,16 +185,7 @@ class DriveAbstract(object):
                 tune,
                 bpm_processor
             )
-            self._write_single_bpm_results(
-                lin_outfile,
-                bpm_results
-            )
-        plane_number = "1" if self._plane == "X" else "2"
-        lin_outfile.add_float_descriptor("Q" + plane_number, tune)
-        lin_outfile.add_float_descriptor("Q" + plane_number + "RMS",
-                                         rms_tune)
-        lin_outfile.order_rows("S")
-        lin_outfile.write_to_file()
+            self._bpm_results.append(bpm_results)
 
     def _write_single_bpm_results(self, lin_outfile, bpm_results):
         row = [bpm_results.name, bpm_results.position, 0, 0, bpm_results.tune,
@@ -199,6 +228,7 @@ class DriveAbstract(object):
     def _compute_from_avg(self, tune, bpm_results):
         coef = bpm_results.get_coefficient_for_freq(tune)
         return np.abs(coef), np.angle(coef) / (2 * np.pi)
+    ######
 
 
 class DriveFile(DriveAbstract):
@@ -249,10 +279,16 @@ class DriveFile(DriveAbstract):
                     continue
         pool = multiprocessing.Pool(PROCESSES)
         num_of_chunks = int(len(lines) / PROCESSES) + 1
-        for bpm_datas in DriveAbstract.chunks(lines, num_of_chunks):
+        for bpm_datas in DriveFile.chunks(lines, num_of_chunks):
             self._launch_bpm_chunk_analysis(bpm_datas, pool)
         pool.close()
         pool.join()
+
+    @staticmethod
+    def chunks(l, n):
+        """Yield successive n-sized chunks from l."""
+        for i in xrange(0, len(l), n):  # noqa xrange doesn't exist in Python3
+            yield l[i:i + n]
 
     def _launch_bpm_chunk_analysis(self, bpm_datas, pool):
         args = (self._plane, self._start_turn, self._end_turn, self._tolerance,

@@ -96,6 +96,7 @@ def init_from_file(input_file, tunes, nattunes=None,
                                start_turn=0, end_turn=None,
                                output_dir=None, sequential=False)
         drive_file.start_analysis()
+        drive_file.write_full_results()
 
 
 def init_from_matrix(bpm_names, bpm_matrix, tunes, plane,
@@ -107,6 +108,7 @@ def init_from_matrix(bpm_names, bpm_matrix, tunes, plane,
                                tolerance=drive.DEF_TUNE_TOLERANCE,
                                start_turn=0, end_turn=None, sequential=False)
     drive_matrix.start_analysis()
+    return drive_matrix
 
 
 if __name__ == "__main__":
