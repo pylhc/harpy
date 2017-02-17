@@ -2,7 +2,7 @@ import numpy as np
 
 PI2I = 2 * np.pi * complex(0, 1)
 
-ZERO_PAD_DEF = True
+ZERO_PAD_DEF = False
 HANN_DEF = False
 
 
