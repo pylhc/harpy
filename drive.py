@@ -19,10 +19,10 @@ PI2I = 2 * np.pi * complex(0, 1)
 
 HEADERS = {"X": ["NAME", "S", "BINDEX", "SLABEL", "TUNEX",
                  "NOISE", "PK2PK", "CO", "CORMS", "AMPX",
-                 "MUX", "AVG_AMPX", "AVG_MUX"],
+                 "MUX", "AVG_AMPX", "AVG_MUX", "BPM_RES"],
            "Y": ["NAME", "S", "BINDEX", "SLABEL", "TUNEY",
                  "NOISE", "PK2PK", "CO", "CORMS",
-                 "AMPY", "MUY", "AVG_AMPY", "AVG_MUY"]}
+                 "AMPY", "MUY", "AVG_AMPY", "AVG_MUY", "BPM_RES"]}
 
 SPECTR_COLUMN_NAMES = ["FREQ", "AMP"]
 
@@ -192,7 +192,7 @@ class DriveAbstract(object):
                0, bpm_results.peak_to_peak, bpm_results.closed_orbit,
                bpm_results.closed_orbit_rms, bpm_results.amplitude,
                bpm_results.phase, bpm_results.amp_from_avg,
-               bpm_results.phase_from_avg]
+               bpm_results.phase_from_avg, bpm_results.bpm_resolution]
         resonance_list = RESONANCE_LISTS[self._plane]
         main_resonance = MAIN_LINES[self._plane]
         for resonance in resonance_list:
@@ -524,3 +524,4 @@ class _BpmResults(object):
         self.frequencies = None
         self.coefficients = None
         self.bpm_processor = None
+        self.bpm_resolution = -1.
