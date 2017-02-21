@@ -246,11 +246,11 @@ class DriveFile(DriveAbstract):
         super(DriveFile, self).__init__(
             tunes,
             plane,
-            nattunes=None,
-            tolerance=DEF_TUNE_TOLERANCE,
-            start_turn=0,
-            end_turn=None,
-            sequential=False
+            nattunes,
+            tolerance,
+            start_turn,
+            end_turn,
+            sequential,
         )
         self._input_file = input_file
         if output_dir is None:
@@ -294,6 +294,8 @@ class DriveFile(DriveAbstract):
         args = (self._plane, self._start_turn, self._end_turn, self._tolerance,
                 self._resonances_freqs, self._spectr_outdir, bpm_datas)
         if self._sequential:
+            if DEBUG:
+                print("Sequential mode")
             self._bpm_processors.extend(_analyze_bpm_chunk(*args))
         else:
             pool.apply_async(
@@ -347,11 +349,11 @@ class DriveMatrix(DriveAbstract):
         super(DriveMatrix, self).__init__(
             tunes,
             plane,
-            nattunes=None,
-            tolerance=DEF_TUNE_TOLERANCE,
-            start_turn=0,
-            end_turn=None,
-            sequential=False
+            nattunes,
+            tolerance,
+            start_turn,
+            end_turn,
+            sequential,
         )
         self._bpm_names = bpm_names
         self._bpm_matrix = bpm_matrix

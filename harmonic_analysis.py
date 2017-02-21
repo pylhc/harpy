@@ -4,13 +4,17 @@ PI2I = 2 * np.pi * complex(0, 1)
 
 ZERO_PAD_DEF = False
 HANN_DEF = False
+SUBTR_ORBIT_DEF = False
 
 
 class HarmonicAnalysis(object):
 
-    def __init__(self, samples, zero_pad=ZERO_PAD_DEF, hann=HANN_DEF):
+    def __init__(self, samples, zero_pad=ZERO_PAD_DEF, hann=HANN_DEF,
+                 subtr_orbit=SUBTR_ORBIT_DEF):
         self._samples = samples
         self._compute_orbit()
+        if subtr_orbit:
+            self._samples = self._samples - self.closed_orbit
         if zero_pad:
             self._pad_signal()
         self._length = len(self._samples)
@@ -123,7 +127,7 @@ class HarmonicAnalysis(object):
 
     def _compute_orbit(self):
         self.closed_orbit = np.mean(self._samples)
-        self.closed_orbit_rms = np.std(self._samples)
+        self.closed_orbit_rms = np.std(self._samples) / np.sqrt(self._length)
         self.peak_to_peak = np.max(self._samples) - np.min(self._samples)
 
     @staticmethod
