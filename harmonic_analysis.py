@@ -127,7 +127,7 @@ class HarmonicAnalysis(object):
 
     def _compute_orbit(self):
         self.closed_orbit = np.mean(self._samples)
-        self.closed_orbit_rms = np.std(self._samples) / np.sqrt(self._length)
+        self.closed_orbit_rms = np.std(self._samples) / np.sqrt(len(self._samples))
         self.peak_to_peak = np.max(self._samples) - np.min(self._samples)
 
     @staticmethod
