@@ -339,7 +339,7 @@ class DriveMatrix(DriveAbstract):
                  bpm_matrix,
                  tunes,
                  plane,
-                 output_dir,
+                 output_file,
                  model_path,
                  nattunes=None,
                  tolerance=DEF_TUNE_TOLERANCE,
@@ -358,13 +358,14 @@ class DriveMatrix(DriveAbstract):
         self._bpm_names = bpm_names
         self._bpm_matrix = bpm_matrix
         self._model_path = model_path
-        self._output_dir = output_dir
+        self._output_filename = os.path.basename(output_file)
+        self._output_dir = os.path.dirname(output_file)
         self._spectr_outdir = os.path.join(
             self._output_dir, "BPM"
         )
 
     def _get_outfile_name(self, plane):
-        return "harmonics_" + plane.lower() + ".dat"
+        return self._output_filename
 
     def _do_analysis(self):
         model = metaclass.twiss(self._model_path)

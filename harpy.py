@@ -100,11 +100,11 @@ def init_from_file(input_file, tunes, nattunes=None,
 
 
 def init_from_matrix(bpm_names, bpm_matrix, tunes, plane,
-                     output_dir, model_path, nattunes=None,
+                     output_file, model_path, nattunes=None,
                      tolerance=drive.DEF_TUNE_TOLERANCE,
                      start_turn=0, end_turn=None, sequential=False):
     drive_matrix = DriveMatrix(bpm_names, bpm_matrix, tunes, plane,
-                               output_dir, model_path, nattunes,
+                               output_file, model_path, nattunes,
                                tolerance,
                                start_turn, end_turn, sequential)
     drive_matrix.start_analysis()
