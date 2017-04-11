@@ -260,6 +260,11 @@ class DriveFile(DriveAbstract):
         self._spectr_outdir = os.path.join(
             self._output_dir, "BPM"
         )
+        self._create_spectr_outdir()
+
+    def _create_spectr_outdir(self):
+        if not os.path.isdir(self._spectr_outdir):
+            os.mkdir(self._spectr_outdir)
 
     def _get_outfile_name(self, plane):
         return os.path.basename(self._input_file) + "_lin" + plane.lower()
