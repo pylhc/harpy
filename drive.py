@@ -1,6 +1,7 @@
 from __future__ import print_function
 import os
 import multiprocessing
+import logging
 import numpy as np
 from harmonic_analysis import HarmonicAnalysis
 
@@ -10,6 +11,8 @@ _python_path_manager.append_betabeat()
 from Python_Classes4MAD import metaclass  # noqa
 from Utilities import tfs_file_writer  # noqa
 from Utilities import iotools  # noqa
+
+LOGGER = logging.getLogger(__name__)
 
 PI2I = 2 * np.pi * complex(0, 1)
 
@@ -40,7 +43,6 @@ DEF_TUNE_TOLERANCE = 0.001
 NUM_HARMS = 300
 
 PROCESSES = multiprocessing.cpu_count()
-DEBUG = False
 
 
 class DriveAbstract(object):
@@ -88,8 +90,7 @@ class DriveAbstract(object):
         self._gather_results()
 
     def write_full_results(self):
-        if DEBUG:
-            print("Writting results...")
+        LOGGER.debug("Writting results...")
         self._create_lin_files()
         iotools.create_dirs(self._spectr_outdir)
         lin_outfile = self._lin_outfile
@@ -105,8 +106,7 @@ class DriveAbstract(object):
                                          rms_tune)
         lin_outfile.order_rows("S")
         lin_outfile.write_to_file()
-        if DEBUG:
-            print("Writting done.")
+        LOGGER.debug("Writting done.")
     ######
 
     # Methods to override in subclasses:
@@ -167,8 +167,7 @@ class DriveAbstract(object):
         self._lin_outfile = lin_outfile
 
     def _gather_results(self):
-        if DEBUG:
-            print("Gathering results...")
+        LOGGER.debug("Gathering results...")
         self._measured_tune = self._compute_tune_stats()
         tune, _ = self._measured_tune
         for bpm_processor in self._bpm_processors:
@@ -295,8 +294,7 @@ class DriveFile(DriveAbstract):
         args = (self._plane, self._start_turn, self._end_turn, self._tolerance,
                 self._resonances_freqs, self._spectr_outdir, bpm_datas)
         if self._sequential:
-            if DEBUG:
-                print("Sequential mode")
+            LOGGER.info("Harpy in sequential mode")
             self._bpm_processors.extend(_analyze_bpm_chunk(*args))
         else:
             pool.apply_async(
@@ -315,8 +313,7 @@ def _analyze_bpm_chunk(plane, start_turn, end_turn, tolerance,
     the multiprocessing module.
     """
     results = []
-    if DEBUG:
-        print("Staring process with chunksize", len(bpm_datas))
+    LOGGER.debug("Staring process with chunksize", len(bpm_datas))
     for bpm_data in bpm_datas:
         name = bpm_data.pop(0)
         position = bpm_data.pop(0)
@@ -377,7 +374,7 @@ class DriveMatrix(DriveAbstract):
             try:
                 bpm_position = model.S[model.indx[bpm_name]]
             except KeyError:
-                print("Cannot find", bpm_name, "in model.")
+                LOGGER.debug("Cannot find", bpm_name, "in model.")
                 continue
             self._launch_bpm_row_analysis(bpm_position, bpm_name,
                                           bpm_row, pool)
@@ -409,8 +406,7 @@ def _analyze_bpm_samples(bpm_plane, bpm_name, bpm_samples, bpm_position,
     the multiprocessing module.
     """
     results = []
-    if DEBUG:
-        print("Staring process for ", bpm_name)
+    LOGGER.debug("Staring process for ", bpm_name)
     bpm_processor = _BpmProcessor(
         start_turn, end_turn, tolerance,
         resonances_freqs, spectr_outdir,
@@ -446,8 +442,7 @@ class _BpmProcessor(object):
         )
         self._write_bpm_spectrum(self._name, self._plane,
                                  np.abs(coefficients), frequencies)
-        if DEBUG:
-            print("Done:", self._name, ", plane:", self._plane)
+        LOGGER.debug("Done:", self._name, ", plane:", self._plane)
         self._get_bpm_results(resonances, frequencies, coefficients)
 
     def get_coefficient_for_freq(self, freq):
@@ -457,7 +452,7 @@ class _BpmProcessor(object):
         try:
             tune, main_coefficient = resonances[self._main_resonance]
         except KeyError:
-            print("Cannot find main resonance for", self._name,
+            LOGGER.debug("Cannot find main resonance for", self._name,
                   "in plane", self._plane)
             return None
         amplitude = np.abs(main_coefficient)

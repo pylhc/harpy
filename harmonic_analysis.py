@@ -1,4 +1,7 @@
 import numpy as np
+import logging
+
+LOGGER = logging.getLogger(__name__)
 
 PI2I = 2 * np.pi * complex(0, 1)
 
@@ -140,11 +143,12 @@ class HarmonicAnalysis(object):
         """
         try:
             from numba import jit
-            print("Using compiled Numba functions.")
+            LOGGER.debug("Using compiled Numba functions.")
             return jit(HarmonicAnalysis._compute_coef_goertzel,
                        nopython=True, nogil=True)
         except ImportError:
             print("Numba not found, using numpy functions.")
+            LOGGER.debug("Numba not found, using numpy functions.")
             return HarmonicAnalysis._compute_coef_simple
 
     @staticmethod
@@ -157,11 +161,12 @@ class HarmonicAnalysis(object):
         try:
             from scipy.fftpack import fft as scipy_fft
             fft = staticmethod(scipy_fft)
-            print("Scipy found, using scipy FFT.")
+            LOGGER.debug("Scipy found, using scipy FFT.")
         except ImportError:
             from numpy.fft import fft as numpy_fft
-            fft = staticmethod(numpy_fft)
             print("Scipy not found, using numpy FFT.")
+            LOGGER.debug("Scipy not found, using numpy FFT.")
+            fft = staticmethod(numpy_fft)
         return fft
 
 # Set up conditional functions on load ##############################################

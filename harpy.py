@@ -1,6 +1,10 @@
+import sys
 import optparse
+import logging
 import drive
 from drive import DriveFile, DriveMatrix
+
+LOGGER = logging.getLogger(__name__)
 
 
 def _parse_args():
@@ -111,5 +115,14 @@ def init_from_matrix(bpm_names, bpm_matrix, tunes, plane,
     return drive_matrix
 
 
+def _set_up_main_logger():
+    main_logger = logging.getLogger("")
+    main_logger.setLevel(logging.DEBUG)
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(logging.INFO)
+    main_logger.addHandler(console_handler)
+
+
 if __name__ == "__main__":
+    _set_up_main_logger()
     _init_from_args()
