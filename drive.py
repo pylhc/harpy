@@ -1,15 +1,11 @@
 from __future__ import print_function
-import sys
 import os
 import multiprocessing
 import numpy as np
 from harmonic_analysis import HarmonicAnalysis
 
-
-if "win" not in sys.platform:
-    sys.path.append("/afs/cern.ch/work/j/jcoellod/public/Beta-Beat.src")
-else:
-    sys.path.append("\\\\AFS\\cern.ch\\work\\j\\jcoellod\\public\\Beta-Beat.src")
+import _python_path_manager
+_python_path_manager.append_betabeat()
 
 from Python_Classes4MAD import metaclass  # noqa
 from Utilities import tfs_file_writer  # noqa
