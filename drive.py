@@ -11,15 +11,16 @@ _python_path_manager.append_betabeat()
 from Python_Classes4MAD import metaclass  # noqa
 from Utilities import tfs_file_writer  # noqa
 from Utilities import iotools  # noqa
+from Utilities import outliers  # noqa
 
 LOGGER = logging.getLogger(__name__)
 
 PI2I = 2 * np.pi * complex(0, 1)
 
-HEADERS = {"X": ["NAME", "S", "BINDEX", "SLABEL", "TUNEX",
+HEADERS = {"X": ["NAME", "S", "BINDEX", "SLABEL", "TUNEX", #"TUNEZ"
                  "NOISE", "PK2PK", "CO", "CORMS", "AMPX",
                  "MUX", "AVG_AMPX", "AVG_MUX", "BPM_RES"],
-           "Y": ["NAME", "S", "BINDEX", "SLABEL", "TUNEY",
+           "Y": ["NAME", "S", "BINDEX", "SLABEL", "TUNEY", #"TUNEZ"
                  "NOISE", "PK2PK", "CO", "CORMS",
                  "AMPY", "MUY", "AVG_AMPY", "AVG_MUY", "BPM_RES"]}
 
@@ -218,12 +219,14 @@ class DriveAbstract(object):
             except AttributeError:
                 continue
             tune_list.append(bpm_results.tune)
-        return np.mean(tune_list), np.std(tune_list)
+        tune_array=np.array(tune_list)
+        tune_array = tune_array[outliers.get_filter_mask(tune_array, limit=1e-5)] #TODO propagate the limit from options
+        return np.mean(tune_array), np.std(tune_array)
 
     def _compute_from_avg(self, tune, bpm_results):
         coef = bpm_results.get_coefficient_for_freq(tune)
         return np.abs(coef), np.angle(coef) / (2 * np.pi)
-    ######
+    
 
 
 class DriveFile(DriveAbstract):
