@@ -316,7 +316,7 @@ def _analyze_bpm_chunk(plane, start_turn, end_turn, tolerance,
     the multiprocessing module.
     """
     results = []
-    LOGGER.debug("Staring process with chunksize", len(bpm_datas))
+    LOGGER.debug("Staring process with chunksize" + len(bpm_datas))
     for bpm_data in bpm_datas:
         name = bpm_data.pop(0)
         position = bpm_data.pop(0)
@@ -377,7 +377,7 @@ class DriveMatrix(DriveAbstract):
             try:
                 bpm_position = model.S[model.indx[bpm_name]]
             except KeyError:
-                LOGGER.debug("Cannot find", bpm_name, "in model.")
+                LOGGER.debug("Cannot find" + bpm_name + "in model.")
                 continue
             self._launch_bpm_row_analysis(bpm_position, bpm_name,
                                           bpm_row, pool)
@@ -409,7 +409,7 @@ def _analyze_bpm_samples(bpm_plane, bpm_name, bpm_samples, bpm_position,
     the multiprocessing module.
     """
     results = []
-    LOGGER.debug("Staring process for ", bpm_name)
+    LOGGER.debug("Staring process for " + bpm_name)
     bpm_processor = _BpmProcessor(
         start_turn, end_turn, tolerance,
         resonances_freqs, spectr_outdir,
@@ -445,7 +445,7 @@ class _BpmProcessor(object):
         )
         self._write_bpm_spectrum(self._name, self._plane,
                                  np.abs(coefficients), frequencies)
-        LOGGER.debug("Done:", self._name, ", plane:", self._plane)
+        LOGGER.debug("Done: " + self._name + ", plane:" + self._plane)
         self._get_bpm_results(resonances, frequencies, coefficients)
 
     def get_coefficient_for_freq(self, freq):
@@ -455,8 +455,8 @@ class _BpmProcessor(object):
         try:
             tune, main_coefficient = resonances[self._main_resonance]
         except KeyError:
-            LOGGER.debug("Cannot find main resonance for", self._name,
-                  "in plane", self._plane)
+            LOGGER.debug("Cannot find main resonance for" + self._name +
+                         "in plane" + self._plane)
             return None
         amplitude = np.abs(main_coefficient)
         phase = np.angle(main_coefficient)
