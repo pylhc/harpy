@@ -226,7 +226,6 @@ class DriveAbstract(object):
     def _compute_from_avg(self, tune, bpm_results):
         coef = bpm_results.get_coefficient_for_freq(tune)
         return np.abs(coef), np.angle(coef) / (2 * np.pi)
-    
 
 
 class DriveFile(DriveAbstract):
@@ -459,23 +458,24 @@ class DriveSvd(DriveAbstract):
 
     def _do_analysis(self):
         USV = self._usv
-        allowed = self._get_allowed_length(rang=[0, USV[2].shape[1]])[-1]
-        SV = np.dot(np.diag(USV[1]), USV[2][:, :allowed])
-        freqs, _ = self.laskar_method(200, np.mean(SV, axis=0))
+        SV = np.dot(np.diag(USV[1]), USV[2][:, :self._end_turn])
+        avg_signal = np.mean(SV, axis=0)
+        avg_har_analysis = HarmonicAnalysis(avg_signal)
+        freqs, _ = avg_har_analysis.laskar_method(200)
         frequencies, svd_coefficients = self.laskar_method_modes_freqs(SV, freqs)
         bpms_coefficients = np.dot(USV[0], svd_coefficients)
 
         model = metaclass.twiss(self._model_path)
         pool = multiprocessing.Pool(PROCESSES)
         for bpm_index in range(len(self._bpm_names)):
-	    bpm_name = self._bpm_names[bpm_index]
-	    bpm_coefficients = bpms_coefficients[bpm_index, :]
-	    bpm_samples = self._bpms_matrix[bpm_index, :]
-	    try:
-		bpm_position = model.S[model.indx[bpm_name]]
-	    except KeyError:
-		LOGGER.debug("Cannot find" + bpm_name + "in model.")
-		continue
+            bpm_name = self._bpm_names[bpm_index]
+            bpm_coefficients = bpms_coefficients[bpm_index, :]
+            bpm_samples = self._bpms_matrix[bpm_index, :]
+            try:
+                bpm_position = model.S[model.indx[bpm_name]]
+            except KeyError:
+                LOGGER.debug("Cannot find" + bpm_name + "in model.")
+                continue
             args = (self._plane, bpm_name, bpm_coefficients, frequencies, bpm_samples, bpm_position,
                     self._start_turn, self._end_turn, self._tolerance,
                     self._resonances_freqs, self._spectr_outdir)
@@ -490,95 +490,28 @@ class DriveSvd(DriveAbstract):
         pool.close()
         pool.join()
 
-
-    def laskar_method(self, num_harmonics, samples):
-        samples = samples[:]  # Copy the samples array.
-        n = len(samples)
-        ints = np.arange(n)
-        coefficients = []
-        frequencies = []
-        for _ in range(num_harmonics):
-            # Compute this harmonic frequency and coefficient.
-            dft_data = np.fft.fft(samples)
-            frequency = self.jacobsen(dft_data)
-            coefficient = self.compute_coef_simple(samples, frequency * n) / n
-
-            # Store frequency and amplitude
-            coefficients.append(coefficient)
-            frequencies.append(frequency)
-
-            # Subtract the found pure tune from the signal
-            new_signal = coefficient * np.exp(PI2I * frequency * ints)
-            samples = samples - new_signal
-
-        coefficients, frequencies = zip(*sorted(zip(coefficients, frequencies),
-                                                key=lambda tuple: np.abs(tuple[0]),
-                                                reverse=True))
-        return frequencies, coefficients
-
-
     def laskar_method_modes_freqs(self, samples, freqs):
         n = samples.shape[1]
         ints = np.arange(n)
-        frequencies = np.empty([len(freqs)])
-        coefficients = np.empty([samples.shape[0],len(freqs)], dtype=complex)
+        frequencies = np.empty((len(freqs), ))
+        coefficients = np.empty((samples.shape[0], len(freqs)), dtype=complex)
         for i, frequency in enumerate(freqs):
             frequencies[i] = frequency
-            coefficients[:,i] = np.sum(np.exp(-PI2I * frequency * ints) * samples, axis=1)/ n
-        
-        #coefficients, frequencies = zip(*sorted(zip(coefficients, frequencies), key=lambda tuple: np.abs(tuple[0]), reverse=True))
+            coefficients[:, i] = np.sum(np.exp(-PI2I * frequency * ints) * samples, axis=1) / n
+
         return frequencies, coefficients
-
-
-
-    def jacobsen(self, dft_values):
-        """
-        This method interpolates the real frequency of the
-        signal using the three highest peaks in the FFT.
-        """
-        k = np.argmax(np.abs(dft_values))
-        n = len(dft_values)
-        r = dft_values
-        delta = np.tan(np.pi / n) / (np.pi / n)
-        kp = (k + 1) % n
-        km = (k - 1) % n
-        delta = delta * np.real((r[km] - r[kp]) / (2 * r[k] - r[km] - r[kp]))
-        return (k + delta) / n
-
-
-    def compute_coef_simple(self, samples, kprime):
-        """
-        Computes the coefficient of the Discrete Time Fourier
-        Transform corresponding to the given frequency (kprime).
-        """
-        n = len(samples)
-        freq = kprime / n
-        exponents = np.exp(-PI2I * freq * np.arange(n))
-        coef = np.sum(exponents * samples)
-        return coef
-
-    def _get_allowed_length(self, rang=[300, 10000], p2max=14, p3max=9, p5max=6):
-        ind = np.indices((p2max, p3max, p5max))
-        nums = (np.power(2, ind[0]) *
-                np.power(3, ind[1]) *
-                np.power(5, ind[2])).reshape(p2max * p3max * p5max)
-        nums = nums[(nums > rang[0]) & (nums <= rang[1])]
-        return np.sort(nums)
 
 
  # Global space ################################################
 
 def _analyze_bpm_samples_svd(bpm_plane, bpm_name, bpm_coefficients, frequencies, bpm_samples, bpm_position,
-                         start_turn, end_turn, tolerance,
-                         resonances_freqs, spectr_outdir):
+                             start_turn, end_turn, tolerance,
+                             resonances_freqs, spectr_outdir):
     bpm_processor = _BpmProcessor(
-	 start_turn, end_turn, tolerance,
-	 resonances_freqs, spectr_outdir,
-	 bpm_plane, bpm_position, bpm_name, None
+        start_turn, end_turn, tolerance,
+        resonances_freqs, spectr_outdir,
+        bpm_plane, bpm_position, bpm_name, None
     )
-    bpm_coefficients, frequencies = zip(*sorted(zip(bpm_coefficients, frequencies),
-					key=lambda tuple: np.abs(tuple[0]),
-					reverse=True))
     resonances = bpm_processor.resonance_search(frequencies, bpm_coefficients)
     bpm_processor._harmonic_analysis = HarmonicAnalysis(bpm_samples)
     bpm_processor.get_bpm_results(resonances, frequencies, bpm_coefficients)
@@ -601,6 +534,7 @@ class _BpmProcessor(object):
         self._main_resonance = MAIN_LINES[self._plane]
         self._resonances_freqs = resonances_freqs[self._plane]
         self._samples = samples
+        self.bpm_results = None
 
     def do_bpm_analysis(self):
         harmonic_analysis = HarmonicAnalysis(self._samples)
@@ -643,7 +577,7 @@ class _BpmProcessor(object):
     @staticmethod
     def _compute_bpm_samples(bpm_samples_str, start_turn, end_turn):
         data_length = len(bpm_samples_str)
-        if (end_turn is not None and end_turn < data_length):
+        if end_turn is not None and end_turn < data_length:
             end_index = end_turn
         else:
             end_index = data_length
@@ -658,26 +592,26 @@ class _BpmProcessor(object):
         )
         spectr_outfile.add_column_names(SPECTR_COLUMN_NAMES)
         spectr_outfile.add_column_datatypes(["%le"] * (len(SPECTR_COLUMN_NAMES)))
-        for i in range(len(amplitudes)):
-            spectr_outfile.add_table_row([freqs[i], amplitudes[i]])
+        for index, amplitude in enumerate(amplitudes):
+            spectr_outfile.add_table_row([freqs[index], amplitudes])
         spectr_outfile.write_to_file()
 
     def resonance_search(self, frequencies, coefficients):
+        np_frequencies = np.array(frequencies)
+        np_coefficients = np.array(coefficients)
         found_resonances = {}
-        sorted_coefficients, sorted_frequencies = zip(*sorted(zip(coefficients, frequencies),
-                                                              key=lambda tuple: np.abs(tuple[0]),
-                                                              reverse=True))
-        for index in range(len(sorted_frequencies)):
-            coefficient = sorted_coefficients[index]
-            frequency = sorted_frequencies[index]
-            for resonance, resonance_freq in self._resonances_freqs.iteritems():
-                min_freq = resonance_freq - self._tolerance
-                max_freq = resonance_freq + self._tolerance
-                if (frequency >= min_freq and
-                        frequency <= max_freq and
-                        resonance not in found_resonances):
-                    found_resonances[resonance] = (frequency, coefficient)
-                    break
+        bins = [((resonance_freq - self._tolerance,
+                  resonance_freq + self._tolerance), resonance)
+                for resonance, resonance_freq in self._resonances_freqs.iteritems()]
+        for bin, resonance in bins:
+            min, max = bin
+            indices = np.where((np_frequencies >= min) & (np_frequencies <= max))[0]
+            if len(indices) == 0:
+                continue
+            max_index = indices[np.argmax(np.abs(np_coefficients[indices]))]
+            found_resonances[resonance] = (np_frequencies[max_index], np_coefficients[max_index])
+            # TODO: Is it right to remove already used lines? I dont think so...:
+            np_frequencies[max_index], np_coefficients[max_index] = -100000., 0.
         return found_resonances
 
 
@@ -694,3 +628,7 @@ class _BpmResults(object):
         self.coefficients = None
         self.bpm_processor = None
         self.bpm_resolution = -1.
+        self.resonances = None
+        self.peak_to_peak = None
+        self.closed_orbit = None
+        self.closed_orbit_rms = None
