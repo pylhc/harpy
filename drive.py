@@ -377,8 +377,7 @@ class DriveMatrix(DriveAbstract):
                 bpm_position = model.S[model.indx[bpm_name]]
             except KeyError:
                 LOGGER.debug("Cannot find" + bpm_name + "in model.")
-                bpm_position = 0.0
-                #continue
+                continue
             self._launch_bpm_row_analysis(bpm_position, bpm_name,
                                           bpm_row, pool)
         pool.close()
@@ -458,16 +457,20 @@ class DriveSvd(DriveAbstract):
 
     def _do_analysis(self):
         USV = self._usv
-        SV = np.dot(np.diag(USV[1]), USV[2][:, :self._end_turn])
-        number_of_harmonics =150
-        freqs=np.empty([SV.shape[0],number_of_harmonics])
+        SV = np.dot(np.diag(USV[1]), USV[2])
+        number_of_harmonics = 100
+        pool = multiprocessing.Pool(np.min([PROCESSES, SV.shape[0]]))
+        freqs = []
         for i in range(SV.shape[0]):
-            #avg_signal = np.mean(SV, axis=0)
-            har_analysis = HarmonicAnalysis(SV[i,:])
-            freqs[i,:], _ = har_analysis.laskar_method(number_of_harmonics)
-        freqs=np.reshape(freqs,(SV.shape[0]*number_of_harmonics))  
-        print(freqs)  
-        frequencies, svd_coefficients = self.laskar_method_modes_freqs(SV, freqs)
+            args = (SV[i, :], number_of_harmonics)
+            if self._sequential:
+                freqs.extend(_laskar_per_mode(*args))
+            else:
+                pool.apply_async(_laskar_per_mode, args, callback=freqs.extend)
+        pool.close()
+        pool.join()
+        frequencies = np.array(freqs)
+        svd_coefficients = self.compute_coefs_for_freqs(SV, frequencies)
         bpms_coefficients = np.dot(USV[0], svd_coefficients)
 
         model = metaclass.twiss(self._model_path)
@@ -495,20 +498,13 @@ class DriveSvd(DriveAbstract):
         pool.close()
         pool.join()
 
-    def laskar_method_modes_freqs(self, samples, freqs):
+    def compute_coefs_for_freqs(self, samples, freqs):
         n = samples.shape[1]
-        ints = np.arange(n)
-        frequencies = np.empty((len(freqs), ))
-        coefficients = np.empty((samples.shape[0], len(freqs)), dtype=complex)
-        for i, frequency in enumerate(freqs):
-            frequencies[i] = frequency
-            coefficients[:, i] = np.sum(np.exp(-PI2I * frequency * ints) * samples, axis=1) / n
-
-        return frequencies, coefficients
+        coefficients = np.dot(samples, np.exp(-PI2I * np.outer(np.arange(n), freqs))) / n
+        return coefficients
 
 
  # Global space ################################################
-
 def _analyze_bpm_samples_svd(bpm_plane, bpm_name, bpm_coefficients, frequencies, bpm_samples, bpm_position,
                              start_turn, end_turn, tolerance,
                              resonances_freqs, spectr_outdir):
@@ -518,10 +514,15 @@ def _analyze_bpm_samples_svd(bpm_plane, bpm_name, bpm_coefficients, frequencies,
         bpm_plane, bpm_position, bpm_name, None
     )
     resonances = bpm_processor.resonance_search(frequencies, bpm_coefficients)
-    bpm_processor._harmonic_analysis = HarmonicAnalysis(bpm_samples)
+    bpm_processor.harmonic_analysis = HarmonicAnalysis(bpm_samples)
     bpm_processor.get_bpm_results(resonances, frequencies, bpm_coefficients)
     return bpm_processor
 
+
+def _laskar_per_mode(sv, number_of_harmonics):
+    har_analysis = HarmonicAnalysis(sv)
+    freqs, _ = har_analysis.laskar_method(number_of_harmonics)
+    return freqs
 ###########################################################
 
 
@@ -539,23 +540,25 @@ class _BpmProcessor(object):
         self._main_resonance = MAIN_LINES[self._plane]
         self._resonances_freqs = resonances_freqs[self._plane]
         self._samples = samples
+        self.harmonic_analysis = None
         self.bpm_results = None
 
     def do_bpm_analysis(self):
-        harmonic_analysis = HarmonicAnalysis(self._samples)
-        frequencies, coefficients = harmonic_analysis.laskar_method(
+        self.harmonic_analysis = HarmonicAnalysis(self._samples)
+        frequencies, coefficients = self.harmonic_analysis.laskar_method(
             NUM_HARMS
         )
         resonances = self.resonance_search(
             frequencies, coefficients,
         )
+        # TODO: this is taking brutally long!:
         self._write_bpm_spectrum(self._name, self._plane,
                                  np.abs(coefficients), frequencies)
         LOGGER.debug("Done: " + self._name + ", plane:" + self._plane)
         self.get_bpm_results(resonances, frequencies, coefficients)
 
     def get_coefficient_for_freq(self, freq):
-        return self._harmonic_analysis.get_coefficient_for_freq(freq)
+        return self.harmonic_analysis.get_coefficient_for_freq(freq)
 
     def get_bpm_results(self, resonances, frequencies, coefficients):
         try:
@@ -574,9 +577,9 @@ class _BpmProcessor(object):
         bpm_results.frequencies = frequencies
         bpm_results.coefficients = coefficients
         bpm_results.resonances = resonances
-        bpm_results.peak_to_peak = self._harmonic_analysis.peak_to_peak
-        bpm_results.closed_orbit = self._harmonic_analysis.closed_orbit
-        bpm_results.closed_orbit_rms = self._harmonic_analysis.closed_orbit_rms
+        bpm_results.peak_to_peak = self.harmonic_analysis.peak_to_peak
+        bpm_results.closed_orbit = self.harmonic_analysis.closed_orbit
+        bpm_results.closed_orbit_rms = self.harmonic_analysis.closed_orbit_rms
         self.bpm_results = bpm_results
 
     @staticmethod
