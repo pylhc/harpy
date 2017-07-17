@@ -140,9 +140,9 @@ class DriveAbstract(object):
         )
         if self._nattunes is not None:
             nattune_x, nattune_y, _ = self._nattunes  # TODO: nattunez?
-            if nattune_x is not None:
+            if self._plane == "X" and nattune_x is not None:
                 self._resonances_freqs["X"]["NATX"] = nattune_x
-            if nattune_y is not None:
+            if self._plane == "Y" and nattune_y is not None:
                 self._resonances_freqs["Y"]["NATY"] = nattune_y
 
     def _create_lin_files(self):
@@ -459,9 +459,14 @@ class DriveSvd(DriveAbstract):
     def _do_analysis(self):
         USV = self._usv
         SV = np.dot(np.diag(USV[1]), USV[2][:, :self._end_turn])
-        avg_signal = np.mean(SV, axis=0)
-        avg_har_analysis = HarmonicAnalysis(avg_signal)
-        freqs, _ = avg_har_analysis.laskar_method(200)
+        number_of_harmonics =150
+        freqs=np.empty([SV.shape[0],number_of_harmonics])
+        for i in range(SV.shape[0]):
+            #avg_signal = np.mean(SV, axis=0)
+            har_analysis = HarmonicAnalysis(SV[i,:])
+            freqs[i,:], _ = har_analysis.laskar_method(number_of_harmonics)
+        freqs=np.reshape(freqs,(SV.shape[0]*number_of_harmonics))  
+        print(freqs)  
         frequencies, svd_coefficients = self.laskar_method_modes_freqs(SV, freqs)
         bpms_coefficients = np.dot(USV[0], svd_coefficients)
 
