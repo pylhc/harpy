@@ -516,6 +516,7 @@ def _analyze_bpm_samples_svd(bpm_plane, bpm_name, bpm_coefficients, frequencies,
     resonances = bpm_processor.resonance_search(frequencies, bpm_coefficients)
     bpm_processor.harmonic_analysis = HarmonicAnalysis(bpm_samples)
     bpm_processor.get_bpm_results(resonances, frequencies, bpm_coefficients)
+    bpm_processor.write_bpm_spectrum(bpm_name, bpm_plane, np.abs(bpm_coefficients), frequencies)
     return bpm_processor
 
 
@@ -551,8 +552,7 @@ class _BpmProcessor(object):
         resonances = self.resonance_search(
             frequencies, coefficients,
         )
-        # TODO: this is taking brutally long!:
-        self._write_bpm_spectrum(self._name, self._plane,
+        self.write_bpm_spectrum(self._name, self._plane,
                                  np.abs(coefficients), frequencies)
         LOGGER.debug("Done: " + self._name + ", plane:" + self._plane)
         self.get_bpm_results(resonances, frequencies, coefficients)
@@ -593,7 +593,7 @@ class _BpmProcessor(object):
             [float(sample) for sample in bpm_samples_str[start_turn:end_index]]
         )
 
-    def _write_bpm_spectrum(self, bpm_name, bpm_plane, amplitudes, freqs):
+    def write_bpm_spectrum(self, bpm_name, bpm_plane, amplitudes, freqs):
         file_name = bpm_name + "." + bpm_plane.lower()
         spectr_outfile = tfs_file_writer.TfsFileWriter(
             os.path.join(self._spectr_outdir, file_name)
@@ -601,7 +601,7 @@ class _BpmProcessor(object):
         spectr_outfile.add_column_names(SPECTR_COLUMN_NAMES)
         spectr_outfile.add_column_datatypes(["%le"] * (len(SPECTR_COLUMN_NAMES)))
         for index, amplitude in enumerate(amplitudes):
-            spectr_outfile.add_table_row([freqs[index], amplitudes])
+            spectr_outfile.add_table_row([freqs[index], amplitude])
         spectr_outfile.write_to_file()
 
     def resonance_search(self, frequencies, coefficients):
