@@ -53,6 +53,14 @@ class HarmonicAnalysis(object):
                                                 reverse=True))
         return frequencies, coefficients
 
+    def fft_method(self, num_harmonics):
+        dft_data = HarmonicAnalysis._fft(self._samples)
+        n = float(len(self._samples))
+        indices = np.argsort(np.abs(dft_data))[::-1][:num_harmonics]
+        frequencies = indices / n
+        coefficients = dft_data[indices] / n
+        return frequencies, coefficients
+
     def get_signal(self):
         if self._hann_window is not None:
             return self._samples * self._hann_window
@@ -90,6 +98,23 @@ class HarmonicAnalysis(object):
         km = (k - 1) % n
         delta = delta * np.real((r[km] - r[kp]) / (2 * r[k] - r[km] - r[kp]))
         return (k + delta) / n
+
+    def _newton(self, kprime, samples):
+        # TODO: Properly do this
+        import scipy
+        new_kprime = scipy.optimize.newton(self._compute_coef_for_newton, kprime, args=(samples, ))
+        return new_kprime
+            
+    def _compute_coef_for_newton(self, kprime, samples):
+        # TODO: Properly do this
+        n = len(samples)
+        freq = kprime / n
+        coef = self._compute_coef(samples, kprime)
+        ints = np.arange(n)
+        exponents = np.exp(-PI2I * freq * ints)
+        derivative_coef = complex(0, 1) * np.sum(exponents * ints * samples)
+        result = coef.real * derivative_coef.real + coef.imag * derivative_coef.imag
+        return result
 
     @staticmethod
     def _compute_coef_simple(samples, kprime):

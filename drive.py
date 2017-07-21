@@ -39,6 +39,8 @@ MAIN_LINES = {"X": (1, 0, 0),
 N_TO_P = {"0": "X",
           "1": "Y"}
 
+DEFAULT_DFT_METHOD = "laskar"
+
 DEF_TUNE_TOLERANCE = 0.001
 
 NUM_HARMS = 300
@@ -546,9 +548,14 @@ class _BpmProcessor(object):
 
     def do_bpm_analysis(self):
         self.harmonic_analysis = HarmonicAnalysis(self._samples)
-        frequencies, coefficients = self.harmonic_analysis.laskar_method(
-            NUM_HARMS
-        )
+        if DEFAULT_DFT_METHOD == "laskar":
+            frequencies, coefficients = self.harmonic_analysis.laskar_method(
+                NUM_HARMS
+            )
+        elif DEFAULT_DFT_METHOD == "fft":
+            frequencies, coefficients = self.harmonic_analysis.fft_method(
+                NUM_HARMS
+            )
         resonances = self.resonance_search(
             frequencies, coefficients,
         )
