@@ -118,11 +118,11 @@ def init_from_matrix(bpm_names, bpm_matrix, tunes, plane,
 def init_from_svd(bpm_names, bpm_data, usv, tunes, plane,
                      output_file, model_path, nattunes=None,
                      tolerance=drive.DEF_TUNE_TOLERANCE,
-                     start_turn=0, end_turn=None, sequential=False):
+                     start_turn=0, end_turn=None, sequential=False, fast=False):
     drive_svd = DriveSvd(bpm_names, bpm_data, usv, tunes, plane,
                                output_file, model_path, nattunes,
                                tolerance,
-                               start_turn, end_turn, sequential)
+                               start_turn, end_turn, sequential, fast)
     drive_svd.start_analysis()
     return drive_svd
 

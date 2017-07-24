@@ -434,7 +434,8 @@ class DriveSvd(DriveAbstract):
                  tolerance=DEF_TUNE_TOLERANCE,
                  start_turn=0,
                  end_turn=None,
-                 sequential=False):
+                 sequential=False,
+                 fast=False):
         super(DriveSvd, self).__init__(
             tunes,
             plane,
@@ -453,6 +454,8 @@ class DriveSvd(DriveAbstract):
         self._spectr_outdir = os.path.join(
             self._output_dir, "BPM"
         )
+        self._fast=fast
+
 
     def _get_outfile_name(self, plane):
         return self._output_filename
@@ -460,17 +463,21 @@ class DriveSvd(DriveAbstract):
     def _do_analysis(self):
         USV = self._usv
         SV = np.dot(np.diag(USV[1]), USV[2])
-        number_of_harmonics = 100
-        pool = multiprocessing.Pool(np.min([PROCESSES, SV.shape[0]]))
-        freqs = []
-        for i in range(SV.shape[0]):
-            args = (SV[i, :], number_of_harmonics)
-            if self._sequential:
-                freqs.extend(_laskar_per_mode(*args))
-            else:
-                pool.apply_async(_laskar_per_mode, args, callback=freqs.extend)
-        pool.close()
-        pool.join()
+        if self._fast:
+            number_of_harmonics = 300
+            freqs = _laskar_per_mode(np.mean(SV,axis=0), number_of_harmonics)
+        else:
+            number_of_harmonics = 100
+            pool = multiprocessing.Pool(np.min([PROCESSES, SV.shape[0]]))
+            freqs = []
+            for i in range(SV.shape[0]):
+                args = (SV[i, :], number_of_harmonics)
+                if self._sequential:
+                    freqs.extend(_laskar_per_mode(*args))
+                else:
+                    pool.apply_async(_laskar_per_mode, args, callback=freqs.extend)
+            pool.close()
+            pool.join()
         frequencies = np.array(freqs)
         svd_coefficients = self.compute_coefs_for_freqs(SV, frequencies)
         bpms_coefficients = np.dot(USV[0], svd_coefficients)
