@@ -141,11 +141,13 @@ class DriveAbstract(object):
             zip(RESONANCE_LISTS[self._plane], freqs)
         )
         if self._nattunes is not None:
-            nattune_x, nattune_y, _ = self._nattunes  # TODO: nattunez?
+            nattune_x, nattune_y, nattune_z = self._nattunes
             if self._plane == "X" and nattune_x is not None:
                 self._resonances_freqs["X"]["NATX"] = nattune_x
             if self._plane == "Y" and nattune_y is not None:
                 self._resonances_freqs["Y"]["NATY"] = nattune_y
+            if nattune_z is not None:
+                self._resonances_freqs[self._plane]["NATZ"] = nattune_z
 
     def _create_lin_files(self):
         file_name = self._get_outfile_name(self._plane)
