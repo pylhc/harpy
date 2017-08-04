@@ -207,9 +207,9 @@ class DriveAbstract(object):
 
         col_name = "NAT" + self._plane.upper()
         try:
-            natural_coef = bpm_results.resonances[col_name]
+            natural_freq, natural_coef = bpm_results.resonances[col_name]
+            row.append(natural_freq)
             row.append(np.abs(natural_coef) / bpm_results.amplitude)
-            row.append(np.angle(natural_coef) / (2 * np.pi))
         except KeyError:
             row.append(0.0)
             row.append(0.0)
